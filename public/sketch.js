@@ -10,7 +10,6 @@ let canvas;
 let controlsContainer, slidersGrid;
 
 let tempSlider, humiditySlider, proximitySlider, peopleSlider;
-let tempLabel, humidityLabel, proximityLabel, peopleLabel;
 let autoSimCheckbox;
 
 // auto-sim progress bar DOM
