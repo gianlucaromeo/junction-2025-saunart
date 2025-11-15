@@ -1180,3 +1180,19 @@ class Dot {
     point(this.position.x, this.position.y);
   }
 }
+
+// At the VERY END of sketch.js
+
+window.startSaunaSketch = function () {
+  if (!window._saunaP5 && window.p5) {
+    // global-mode p5 instance; uses the global setup()/draw()
+    window._saunaP5 = new window.p5();
+  }
+};
+
+window.stopSaunaSketch = function () {
+  if (window._saunaP5) {
+    window._saunaP5.remove();
+    window._saunaP5 = undefined;
+  }
+};
