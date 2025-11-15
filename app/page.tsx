@@ -11,16 +11,16 @@ export default function P5Canvas() {
       {/* Load p5 from CDN */}
       <Script
         src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"
-        strategy="afterInteractive"
+        strategy="beforeInteractive"
       />
 
-<Script
+      <Script
         src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/addons/p5.sound.min.js"
-        strategy="afterInteractive"
+        strategy="beforeInteractive"
       />
 
       {/* Load your existing sketch.js (served from /public) */}
-      <Script src="/sketch.js" strategy="afterInteractive" />
+      <Script src="/sketch.js" strategy="beforeInteractive" />
     </>
   );
 }
