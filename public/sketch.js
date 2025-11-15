@@ -608,7 +608,7 @@ function initMusicSelector() {
   saunaInfoPanel.addClass('sauna-info-panel');
 
   const saunaInfoText = createDiv(
-    'Music and art are generated in real-time by the current state of the sauna. If youn can\'t hear the sound after clicking on the screen, please refresh 🤗.'
+    'Music and art are generated in real-time by the current state of the sauna. If you run into any problem, please refresh 🤗.'
   );
   saunaInfoText.parent(saunaInfoPanel);
   saunaInfoText.addClass('sauna-info-text');
@@ -966,81 +966,90 @@ function mousePressed() {
   }
 }
 
-// ---------- SOUND UPDATES: STABLE LO-FI COMBINATION ----------
+// ---------- SOUND UPDATES: STRONGER PARAM MAPPING ----------
 
 function updateSound(temperature, humidityValue, proximity, people) {
-  if (!audioStarted) return;
-
-  // only run the real-time lo-fi engine when the Lo-fi track is selected
-  if (currentMusic !== 'lofi') {
-    return;
-  }
+  if (!audioStarted || currentMusic !== 'lofi') return;
 
   const now = millis();
 
-  // smooth sensor values to avoid jittery music
-  tempSmooth   = lerp(tempSmooth,   temperature,     0.02);
+  // slightly faster smoothing – still smooth but responsive to sliders
+  tempSmooth   = lerp(tempSmooth,   temperature,     0.08);
   humSmooth    = lerp(humSmooth,    humidityValue,   0.08);
-  peopleSmooth = lerp(peopleSmooth, people,          0.1);
-  proxSmooth   = lerp(proxSmooth,   proximity,       0.1);
+  peopleSmooth = lerp(peopleSmooth, people,          0.12);
+  proxSmooth   = lerp(proxSmooth,   proximity,       0.12);
 
-  // 1) Groove: BPM is mostly constant, lightly moved by temperature
-  const tempInfluence = map(tempSmooth, 15, 110, -5, 5);
-  const lfo = sin(now * 0.0003) * 1.5; // tiny natural drift
-  bpm = baseBpm + tempInfluence + lfo;
-  bpm = constrain(bpm, 70, 86);
-  stepInterval = 60000 / (bpm * 4); // 16ths
+  const temp01   = constrain(map(tempSmooth,   15, 110, 0, 1), 0, 1);
+  const hum01    = constrain(map(humSmooth,     0, 100, 0, 1), 0, 1);
+  const people01 = constrain(map(peopleSmooth,  0,  50, 0, 1), 0, 1);
+  const prox01   = constrain(map(proxSmooth,    0, 200, 0, 1), 0, 1);
 
-  // 2) Chord progression driven by slow-changing temperature
-  let tNorm = constrain(map(tempSmooth, 15, 110, 0, 1), 0, 1);
+  // "energy" = how intense the beat is (temp + people + a bit of proximity)
+  const energy = constrain(
+    temp01   * 0.5 +
+    people01 * 0.35 +
+    prox01   * 0.15,
+    0, 1
+  );
+
+  // "space" = how wet / roomy the sound is (humidity)
+  const space = hum01; // 0 = dry, 1 = very wet
+
+  // 1) TEMPO – clearly slower vs faster
+  const lfo = sin(now * 0.0005) * 2;   // tiny natural drift
+  bpm = 65 + energy * 30 + lfo;        // 65 → 95 BPM
+  bpm = constrain(bpm, 60, 98);
+  stepInterval = 60000 / (bpm * 4);    // 16th notes
+
+  // 2) HARMONY – temperature chooses chord family (same chords, different region)
+  let tNorm = temp01;
   let targetChordIdx = floor(map(tNorm, 0, 1, 0, LOFI_CHORDS.length - 0.001));
   targetChordIdx = constrain(targetChordIdx, 0, LOFI_CHORDS.length - 1);
 
-  // 3) Texture: humidity -> reverb & vinyl noise (but not groove)
-  const vinylLevel = map(humSmooth, 0, 100, 0.02, 0.09);
-  vinylNoise.amp(vinylLevel, 2.0);
+  // 3) TEXTURE – humidity gives more or less reverb + vinyl
+  const vinylLevel = map(space, 0, 1, 0.0, 0.13);
+  vinylNoise.amp(vinylLevel, 0.8);
 
-  const reverbWet = map(humSmooth, 0, 100, 0.45, 0.9);
+  const reverbWet = map(space, 0, 1, 0.15, 0.98);
   reverb.amp(reverbWet);
 
-  // 4) People -> pad & bass loudness (fuller crowd = fuller music)
-  const padBaseAmp = 0.03;
-  const padExtraAmp = map(peopleSmooth, 0, 50, 0.0, 0.14);
-  const padAmp = padBaseAmp + padExtraAmp;
+  // 4) DENSITY – people/energy control how full the mix feels
+  const padAmp = map(energy, 0, 1, 0.0, 0.24);
+  padOsc1.amp(padAmp * 0.85, 0.8);
+  padOsc2.amp(padAmp * 0.6,  0.8);
+  padOsc3.amp(padAmp * 0.5,  0.8);
 
-  padOsc1.amp(padAmp * 0.85, 1.5);
-  padOsc2.amp(padAmp * 0.6,  1.5);
-  padOsc3.amp(padAmp * 0.5,  1.5);
+  const bassAmp = map(energy, 0, 1, 0.03, 0.18);
+  bassOsc.amp(bassAmp, 0.6);
 
-  const bassAmp = map(peopleSmooth, 0, 50, 0.04, 0.13);
-  bassOsc.amp(bassAmp, 1.0);
-
-  // 5) Proximity -> pluck activity and hat brightness
-  const hatCutoff = map(proxSmooth, 0, 200, 5000, 9000);
+  // 5) BRIGHTNESS / DETAIL – use energy for top-end hats brightness
+  const hatCutoff = map(energy, 0, 1, 3500, 10000);
   hatFilter.freq(hatCutoff);
 
-  // --- Step clock: 16 steps per bar, stable lo-fi drum pattern ---
+  // ---------- STEP CLOCK ----------
 
   if (now - lastStepTime >= stepInterval) {
     lastStepTime = now;
     stepIndex = (stepIndex + 1) % 16;
+
+    // bar start = update chords once per bar
     if (stepIndex === 0) {
-      barIndex = (barIndex + 1) % 64; // long cycle
+      barIndex = (barIndex + 1) % 64;
 
-      // at bar boundary, choose chord based on slow temperature
-      const chordIdx = targetChordIdx;
-      const chord = LOFI_CHORDS[chordIdx];
+      const chord = LOFI_CHORDS[targetChordIdx];
 
-      const rootNote = LOFI_ROOT_MIDI;
-      const note1 = midiToFreq(rootNote + chord[0]);
-      const note2 = midiToFreq(rootNote + chord[1]);
-      const note3 = midiToFreq(rootNote + chord[2]);
-      const bassNote = midiToFreq(rootNote - 12 + chord[0]);
+      // slightly higher roots when very energetic
+      const baseRoot = LOFI_ROOT_MIDI + (energy > 0.7 ? 2 : 0);
 
-      // small detune wobble over time
-      const wobble1 = 1 + sin(now * 0.0005) * 0.01;
-      const wobble2 = 1 + sin(now * 0.0004 + 1.3) * 0.015;
-      const wobble3 = 1 + sin(now * 0.00045 + 2.1) * 0.008;
+      const note1 = midiToFreq(baseRoot + chord[0]);
+      const note2 = midiToFreq(baseRoot + chord[1]);
+      const note3 = midiToFreq(baseRoot + chord[2]);
+      const bassNote = midiToFreq(baseRoot - 12 + chord[0]);
+
+      // small detune wobble
+      const wobble1 = 1 + sin(now * 0.0005) * 0.015;
+      const wobble2 = 1 + sin(now * 0.0004 + 1.3) * 0.02;
+      const wobble3 = 1 + sin(now * 0.00045 + 2.1) * 0.012;
 
       padOsc1.freq(note1 * wobble1);
       padOsc2.freq(note2 * wobble2);
@@ -1048,36 +1057,58 @@ function updateSound(temperature, humidityValue, proximity, people) {
       bassOsc.freq(bassNote);
     }
 
-    // Drum pattern:
-    // kick: strong on 1 (0) and 3 (8), optional ghost depending on people
-    if (stepIndex === 0 || stepIndex === 8) {
-      triggerKick();
-    }
-    if (peopleSmooth > 28 && stepIndex === 12 && random() < 0.6) {
-      triggerKick(1); // softer ghost
+    // ---------- DRUM + MELODY PATTERN (ENERGY-DEPENDENT) ----------
+
+    // KICK:
+    // low energy → very sparse
+    // mid energy → your original pattern + ghost
+    // high energy → 4-on-the-floor + several ghosts
+    if (energy < 0.33) {
+      if (stepIndex === 0 || stepIndex === 8) {
+        triggerKick();
+      }
+    } else if (energy < 0.66) {
+      if (stepIndex === 0 || stepIndex === 8) {
+        triggerKick();
+      }
+      if (stepIndex === 12 && random() < 0.5) {
+        triggerKick(1);
+      }
+    } else {
+      if (stepIndex === 0 || stepIndex === 4 || stepIndex === 8 || stepIndex === 12) {
+        triggerKick();
+      }
+      if ((stepIndex === 2 || stepIndex === 10 || stepIndex === 14) && random() < 0.6) {
+        triggerKick(1);
+      }
     }
 
-    // snare: backbeat on 2 (4) and 4 (12)
+    // SNARE:
+    // always backbeat on 2 & 4, with occasional ghosts when very energetic
     if (stepIndex === 4 || stepIndex === 12) {
       triggerSnare();
     }
+    if (energy > 0.75 && (stepIndex === 6 || stepIndex === 14) && random() < 0.3) {
+      triggerSnare();
+    }
 
-    // hats: soft 16th notes, more active with more people
-    const hatProbBase = 0.3;
-    const hatProbExtra = map(peopleSmooth, 0, 50, 0.0, 0.4);
-    const hatProb = hatProbBase + hatProbExtra;
+    // HATS:
+    // clearly change from subtle to very busy
+    const hatProb = map(energy, 0, 1, 0.1, 0.9);
     if (random() < hatProb) {
       triggerHat();
     }
 
-    // pluck: small melodic flicks based on proximity (movement in space)
-    const pluckProb = map(proxSmooth, 0, 200, 0.05, 0.5);
+    // PLUCKS:
+    // mainly controlled by proximity (movement / sensor)
+    const pluckProb = map(prox01, 0, 1, 0.02, 0.65);
     if ((stepIndex === 3 || stepIndex === 7 || stepIndex === 11 || stepIndex === 15) &&
         random() < pluckProb) {
       triggerPluck();
     }
   }
 }
+
 
 // ---------- individual sound triggers ----------
 
