@@ -161,7 +161,7 @@ function initSliders() {
         flex-direction: column;
         align-items: stretch;
         gap: 10px;
-        width: 260px;
+        width: 240px;
         padding: 14px 14px 12px;
         background: rgba(0, 0, 0, 0.78);
         border-radius: 24px;
@@ -324,9 +324,9 @@ function initSliders() {
       .music-selector-container {
         position: fixed;
         left: 24px;
-        bottom: calc(24px + 120px);
+        bottom: 24px;
         transform: none;
-        width: 230px;
+        width: 240px;
         max-height: 340px;
         padding: 14px 14px 10px;
         background: rgba(0, 0, 0, 0.78);
@@ -412,15 +412,16 @@ function initSliders() {
         color: rgba(255, 180, 180, 0.9);
       }
 
+      /* INFO PANEL: moved to bottom-center */
       .sauna-info-panel {
         position: fixed;
-        left: 24px;
+        left: 50%;
         bottom: 24px;
-        transform: none;
-        width: 230px;
+        width: 40%;
+        transform: translateX(-50%);
         padding: 14px 14px;
         background: rgba(0, 0, 0, 0.72);
-        border-radius: 24px;
+        border-radius: 12px;
         border: 1px solid rgba(255, 255, 255, 0.14);
         backdrop-filter: blur(18px);
         -webkit-backdrop-filter: blur(18px);
@@ -581,13 +582,13 @@ function initMusicSelector() {
 
   setActiveMusicItem('lofi');
 
-  // info panel below the soundscape panel, still on the left-bottom cluster
+  // info panel, now bottom-center
   const saunaInfoPanel = createDiv();
   saunaInfoPanel.parent(parentEl);
   saunaInfoPanel.addClass('sauna-info-panel');
 
   const saunaInfoText = createDiv(
-    'Music and art are generated in real-time by the current state of the sauna.'
+    'Music and art are generated in real-time by the current state of the sauna. If youn can\'t hear the sound, please refresh 🤗.'
   );
   saunaInfoText.parent(saunaInfoPanel);
   saunaInfoText.addClass('sauna-info-text');
