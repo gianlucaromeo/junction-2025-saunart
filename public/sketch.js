@@ -1254,7 +1254,8 @@ function draw() {
 
   // interaction circle
   noFill();
-  stroke(150);
+  stroke(150, 0.1);
+  strokeWeight(1);
   circle(interactionX, interactionY, influenceRadius * 2);
 
   // dot grid
