@@ -24,3 +24,35 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes fadeSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.word-animate {
+  opacity: 0;
+  display: inline-block;
+  animation: fadeSlide 0.6s ease-out forwards;
+}
+
+/* stagger timing */
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.3s; }
+.delay-3 { animation-delay: 0.5s; }
+.delay-4 { animation-delay: 0.7s; }
+
+.cta-appear {
+  opacity: 0;
+  animation: fadeSlide 0.7s ease-out forwards;
+  animation-delay: 1.2s;
+}
+
