@@ -13,6 +13,9 @@ let tempSlider, humiditySlider, proximitySlider, peopleSlider;
 let tempLabel, humidityLabel, proximityLabel, peopleLabel;
 let autoSimCheckbox;
 
+// auto-sim progress bar DOM
+let autoSimProgressContainer, autoSimProgressBar;
+
 let autoSimEnabled = false;
 let simStates = {};
 
@@ -235,8 +238,9 @@ function initSliders() {
 
       .control-checkbox-wrap {
         display: flex;
-        align-items: center;
-        gap: 8px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
         font-size: 11px;
         letter-spacing: 0.08em;
@@ -253,6 +257,29 @@ function initSliders() {
         background: rgba(0, 0, 0, 0.4);
         accent-color: #ffffff;
         cursor: pointer;
+      }
+
+      .auto-progress-wrap {
+        position: relative;
+        width: 140px;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        overflow: hidden;
+        opacity: 0;
+        transition: opacity 160ms ease-out;
+      }
+
+      .auto-progress-bar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 0%;
+        border-radius: inherit;
+        background: rgba(255, 255, 255, 0.9);
+        transform-origin: left center;
+        transition: width 80ms linear;
       }
     `;
     const styleEl = createElement('style', css);
@@ -309,7 +336,7 @@ function initSliders() {
   peopleLabel = peopleGroup.label;
   peopleSlider = peopleGroup.slider;
 
-  // auto simulation checkbox
+  // auto simulation checkbox + progress
   const autoGroup = createDiv();
   autoGroup.parent(controlsContainer);
   autoGroup.addClass('control-checkbox-wrap');
@@ -320,9 +347,24 @@ function initSliders() {
   const autoLabel = createSpan('Auto sauna simulation');
   autoLabel.parent(autoGroup);
 
+  // progress bar under the checkbox
+  autoSimProgressContainer = createDiv();
+  autoSimProgressContainer.parent(autoGroup);
+  autoSimProgressContainer.addClass('auto-progress-wrap');
+
+  autoSimProgressBar = createDiv();
+  autoSimProgressBar.parent(autoSimProgressContainer);
+  autoSimProgressBar.addClass('auto-progress-bar');
+
   autoSimCheckbox.changed(() => {
     autoSimEnabled = autoSimCheckbox.checked();
-    if (autoSimEnabled) resetAutoSimulationState();
+    if (autoSimEnabled) {
+      resetAutoSimulationState();
+      autoSimProgressContainer.style('opacity', '1');
+    } else {
+      autoSimProgressContainer.style('opacity', '0');
+      if (autoSimProgressBar) autoSimProgressBar.style('width', '0%');
+    }
   });
 
   positionSliders();
@@ -365,6 +407,9 @@ function initAutoSimulationState() {
 
 function resetAutoSimulationState() {
   initAutoSimulationState();
+  if (autoSimProgressBar) {
+    autoSimProgressBar.style('width', '0%');
+  }
 }
 
 function makeSimState(slider, min, max) {
@@ -395,7 +440,27 @@ function updateAutoSimulation() {
 
     // start a new cycle with a new random N in [1500, 3000] ms
     initSaunaCycle();
+
+    // reset bar visually at new cycle start
+    if (autoSimProgressBar) {
+      autoSimProgressBar.style('width', '0%');
+    }
   }
+}
+
+// update the DOM progress bar for current cycle
+function updateAutoSimProgressUI() {
+  if (!autoSimEnabled) return;
+  if (!autoSimProgressContainer || !autoSimProgressBar) return;
+
+  const now = millis();
+  const elapsed = now - saunaCycleStart;
+  const duration = saunaCycleDuration || 1;
+
+  let t = elapsed / duration; // 0 → start, 1 → just before new tick
+  t = constrain(t, 0, 1);
+
+  autoSimProgressBar.style('width', (t * 100).toFixed(1) + '%');
 }
 
 // ---------- stat animation state ----------
@@ -671,8 +736,6 @@ function triggerPluck() {
   pluckEnv.play(pluckOsc, 0);
 }
 
-// ---------- sauna full-screen background ----------
-
 // ---------- northern lights aurora background (full-screen ribbons) ----------
 
 function drawAurora(temperature, humidityValue) {
@@ -730,6 +793,7 @@ function drawAurora(temperature, humidityValue) {
 function draw() {
   if (autoSimEnabled) {
     updateAutoSimulation();
+    updateAutoSimProgressUI();
   }
 
   background(0);
