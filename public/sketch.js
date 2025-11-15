@@ -55,7 +55,10 @@ let musicListContainer, musicListInner, musicMessageEl;
 let musicItemEls = {};
 let currentMusic = "lofi"; // default
 
-// ---------- LO-FI MUSIC SETUP ----------
+// track the LIVE badge element
+let liveBadgeEl = null;
+
+// ---------- LO-FI MUSIC + MP3 SETUP ----------
 
 // chord palette (F minor-ish, simple lo-fi set)
 const LOFI_CHORDS = [
@@ -87,6 +90,10 @@ let hatNoise, hatFilter, hatEnv;
 
 // vinyl
 let vinylNoise, vinylFilter;
+
+// shared MP3 player for all non-lofi tracks
+let naturePlayer = null;
+let naturePlayerLoaded = false;
 
 // clock (fixed groove, only gently influenced by params)
 let baseBpm = 78;
@@ -402,6 +409,17 @@ function initSliders() {
         color: rgba(255, 255, 255, 0.8);
       }
 
+      /* LIVE badge color states */
+      .music-badge.live-green {
+        border-color: #22c55e;
+        color: #22c55e;
+      }
+
+      .music-badge.live-orange {
+        border-color: #fb923c;
+        color: #fb923c;
+      }
+
       .music-selector-message {
         margin-top: 6px;
         min-height: 14px;
@@ -409,7 +427,7 @@ function initSliders() {
         font-size: 11px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: rgba(255, 180, 180, 0.9);
+        color: rgba(255, 180, 180, 0.9); /* default reddish, overridden in JS when needed */
       }
 
       /* INFO PANEL: moved to bottom-center */
@@ -570,6 +588,8 @@ function initMusicSelector() {
       const badge = createSpan('LIVE');
       badge.parent(item);
       badge.addClass('music-badge');
+      badge.addClass('live-green'); // default: lo-fi selected, LIVE is green
+      liveBadgeEl = badge;
     }
 
     item.mousePressed(() => handleMusicChange(key));
@@ -610,19 +630,94 @@ function formatMusicLabel(key) {
   return mapLabels[key] || key.replace(/_/g, ' ');
 }
 
-function handleMusicChange(key) {
-  // Only Lo-fi is actually available; everything else is "coming soon"
-  if (key === 'lofi') {
-    currentMusic = 'lofi';
-    setActiveMusicItem('lofi');
-    if (musicMessageEl) musicMessageEl.html('');
-  } else {
-    if (musicMessageEl) musicMessageEl.html('Coming soon');
-    // keep playback on lo-fi, visually revert selection
-    currentMusic = 'lofi';
-    setActiveMusicItem('lofi');
+function updateLiveBadgeColor(mode) {
+  if (!liveBadgeEl) return;
+  if (mode === 'green') {
+    liveBadgeEl.removeClass('live-orange');
+    liveBadgeEl.addClass('live-green');
+  } else if (mode === 'orange') {
+    liveBadgeEl.removeClass('live-green');
+    liveBadgeEl.addClass('live-orange');
   }
 }
+
+function startNatureTrack() {
+  // ensure audio context + synth init exists (even if we mute synth)
+  if (!audioStarted) {
+    userStartAudio();
+    initSound();
+    audioStarted = true;
+  }
+
+  if (!naturePlayer) {
+    // shared MP3 file for all non-lofi tracks
+    naturePlayer = loadSound(
+      '/nature.mp3',
+      () => {
+        naturePlayerLoaded = true;
+        naturePlayer.setLoop(true);
+        naturePlayer.amp(0.75, 0.25);
+        naturePlayer.play();
+      },
+      (err) => {
+        console.error('Error loading /public/nature.mp3', err);
+      }
+    );
+  } else {
+    if (!naturePlayer.isPlaying()) {
+      naturePlayer.loop();
+      naturePlayer.amp(0.75, 0.25);
+    }
+  }
+}
+
+function stopNatureTrack() {
+  if (naturePlayer && naturePlayer.isPlaying()) {
+    naturePlayer.stop();
+  }
+}
+
+function handleMusicChange(key) {
+  // move LIVE badge next to the newly selected item
+  if (liveBadgeEl && musicItemEls[key]) {
+    liveBadgeEl.parent(musicItemEls[key]);
+  }
+
+  if (key === 'lofi') {
+    // switch to real-time lo-fi engine: LIVE is green
+    currentMusic = 'lofi';
+    setActiveMusicItem('lofi');
+
+    if (musicMessageEl) {
+      musicMessageEl.html('');
+      musicMessageEl.style('color', 'rgba(255, 255, 255, 0.7)');
+    }
+
+    updateLiveBadgeColor('green');
+
+    stopNatureTrack();
+    if (masterGain) {
+      masterGain.amp(0.7, 0.4);
+    }
+  } else {
+    // non-lofi selection: MP3 playback, LIVE turns orange
+    currentMusic = key;
+    setActiveMusicItem(key);
+
+    if (musicMessageEl) {
+      musicMessageEl.html('Real-time coming soon!');
+      musicMessageEl.style('color', 'rgba(253, 186, 116, 0.95)');
+    }
+
+    updateLiveBadgeColor('orange');
+
+    if (masterGain) {
+      masterGain.amp(0.0, 0.6);
+    }
+    startNatureTrack();
+  }
+}
+
 
 function setActiveMusicItem(key) {
   for (const type in musicItemEls) {
@@ -876,9 +971,9 @@ function mousePressed() {
 function updateSound(temperature, humidityValue, proximity, people) {
   if (!audioStarted) return;
 
-  // even if UI pretends to switch tracks, engine stays on Lo-fi only
+  // only run the real-time lo-fi engine when the Lo-fi track is selected
   if (currentMusic !== 'lofi') {
-    currentMusic = 'lofi';
+    return;
   }
 
   const now = millis();
