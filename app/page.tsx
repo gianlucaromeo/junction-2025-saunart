@@ -10,8 +10,7 @@ export default function Page() {
           style={{ fontSize: "88px" }}
         >
           <span className="text-gray-600">WHAT IF</span>{" "}
-          <span className="text-white">SAUNA SENSORS</span>{" "}
-          <br />
+          <span className="text-white">SAUNA SENSORS</span> <br />
           <span className="text-gray-600">COULD GENERATE</span>
           <br />
           <span className="text-gray-300"></span>{" "}

@@ -393,6 +393,33 @@ function initSliders() {
         text-transform: uppercase;
         color: rgba(255, 180, 180, 0.9);
       }
+
+      .sauna-info-panel {
+        position: fixed;
+        left: 24px;
+        top: calc(50% + 210px); /* visually below the soundscape panel */
+        transform: translateY(-50%);
+        width: 230px;
+        padding: 14px 14px;
+        background: rgba(0, 0, 0, 0.72);
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+        z-index: 21;
+        display: flex;
+        align-items: flex-start;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      }
+
+      .sauna-info-text {
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        line-height: 1.4;
+        color: rgba(255, 255, 255, 0.82);
+      }
     `;
     const styleEl = createElement('style', css);
     const head = select('head');
@@ -526,6 +553,17 @@ function initMusicSelector() {
   musicMessageEl.addClass('music-selector-message');
 
   setActiveMusicItem('lofi');
+
+  // soft info panel below the soundscape panel
+  const saunaInfoPanel = createDiv();
+  saunaInfoPanel.parent(parentEl);
+  saunaInfoPanel.addClass('sauna-info-panel');
+
+  const saunaInfoText = createDiv(
+    'Music and art are generated in real-time by the current state of the sauna.'
+  );
+  saunaInfoText.parent(saunaInfoPanel);
+  saunaInfoText.addClass('sauna-info-text');
 }
 
 function formatMusicLabel(key) {
