@@ -1273,7 +1273,7 @@ function draw() {
 function drawStatsOverlay(temperature, humidityValue, proximity, people) {
   const colWidth   = width / 4;
   const cardWidth  = colWidth - 24;
-  const cardHeight = 70;
+  const cardHeight = 130;
   const cardY      = 20;
 
   const stats = [
@@ -1296,7 +1296,9 @@ function drawStatsOverlay(temperature, humidityValue, proximity, people) {
 
   push();
   colorMode(RGB, 255);
-  textFont('sans-serif');
+  textFont('system-ui');
+  textAlign(CENTER, CENTER);
+  noStroke();
 
   for (let i = 0; i < 4; i++) {
     const cx = colWidth * (i + 0.5);
@@ -1310,7 +1312,7 @@ function drawStatsOverlay(temperature, humidityValue, proximity, people) {
 
     const elapsed = now - statAnim[i].lastChangeTime;
 
-    const baseSize = 28;
+    const baseSize = 56; // doubled from original 28
     let valueSize = baseSize;
     let valueColor = { r: 255, g: 255, b: 255 };
 
@@ -1327,25 +1329,27 @@ function drawStatsOverlay(temperature, humidityValue, proximity, people) {
       };
     }
 
-    noStroke();
-    fill(0, 0, 0, 190);
-    rect(x, y, cardWidth, cardHeight, 16);
+    // background container
+    fill(0, 0, 0, 100);
+    rect(x, y, cardWidth, cardHeight, 18);
 
-    // fill(255, 255, 255, 120);
-    // rect(x, y, cardWidth, 3, 16, 16, 0, 0);
-
+    // value (large)
     fill(valueColor.r, valueColor.g, valueColor.b);
-    textAlign(CENTER, CENTER);
     textSize(valueSize);
-    text(stats[i].value, cx, y + cardHeight / 2 - 8);
+    const valueY = y + cardHeight * 0.45;
+    text(stats[i].value, cx, valueY);
 
-    textSize(12);
+    // label (bigger too)
+    textSize(24); // doubled from original 12
     fill(200);
-    text(stats[i].label, cx, y + cardHeight - 14);
+    const labelY = y + cardHeight - 24;
+    text(stats[i].label, cx, labelY);
   }
 
   pop();
 }
+
+
 
 // --- Dot class ---
 
