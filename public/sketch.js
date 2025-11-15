@@ -117,7 +117,6 @@ function setup() {
   initHaloOrbs();
   initSliders();
 
-
   // initialize smoothed background state from sliders
   saunaBGTemp = tempSlider.value();
   saunaBGHum = humiditySlider.value();
@@ -155,33 +154,35 @@ function initSliders() {
     const css = `
       .controls-container {
         position: fixed;
-        left: 50%;
-        bottom: 28px;
-        transform: translateX(-50%);
+        right: 24px;
+        bottom: 24px;
+        transform: none;
         display: flex;
-        gap: 24px;
-        align-items: center;
-        padding: 22px 32px;
-        background: rgba(0, 0, 0, 0.72);
-        border-radius: 48px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        width: 260px;
+        padding: 14px 14px 12px;
+        background: rgba(0, 0, 0, 0.78);
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
         backdrop-filter: blur(18px);
         -webkit-backdrop-filter: blur(18px);
-        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.65);
-        z-index: 20;
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.75);
+        z-index: 22;
       }
 
       .sliders-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(180px, 1fr));
-        gap: 14px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
       }
 
       .control-group {
         display: flex;
         flex-direction: column;
         gap: 6px;
-        min-width: 190px;
+        width: 100%;
       }
 
       .control-label {
@@ -282,6 +283,7 @@ function initSliders() {
         text-transform: uppercase;
         color: rgba(255, 255, 255, 0.76);
         white-space: nowrap;
+        margin-top: 4px;
       }
 
       .control-checkbox-wrap input[type="checkbox"] {
@@ -322,8 +324,8 @@ function initSliders() {
       .music-selector-container {
         position: fixed;
         left: 24px;
-        top: 50%;
-        transform: translateY(-50%);
+        bottom: calc(24px + 120px);
+        transform: none;
         width: 230px;
         max-height: 340px;
         padding: 14px 14px 10px;
@@ -413,8 +415,8 @@ function initSliders() {
       .sauna-info-panel {
         position: fixed;
         left: 24px;
-        top: calc(50% + 210px); /* visually below the soundscape panel */
-        transform: translateY(-50%);
+        bottom: 24px;
+        transform: none;
         width: 230px;
         padding: 14px 14px;
         background: rgba(0, 0, 0, 0.72);
@@ -449,7 +451,16 @@ function initSliders() {
   controlsContainer.parent(parentEl);
   controlsContainer.addClass('controls-container');
 
-  // --- grid for sliders (2x2) ---
+  // header + subtitle for sliders, same style as music panel
+  const controlsHeader = createDiv('Sauna state');
+  controlsHeader.parent(controlsContainer);
+  controlsHeader.addClass('music-selector-header');
+
+  const controlsSubtitle = createDiv('Adjust conditions');
+  controlsSubtitle.parent(controlsContainer);
+  controlsSubtitle.addClass('music-selector-subtitle');
+
+  // --- column for sliders ---
   slidersGrid = createDiv();
   slidersGrid.parent(controlsContainer);
   slidersGrid.addClass('sliders-grid');
@@ -570,7 +581,7 @@ function initMusicSelector() {
 
   setActiveMusicItem('lofi');
 
-  // soft info panel below the soundscape panel
+  // info panel below the soundscape panel, still on the left-bottom cluster
   const saunaInfoPanel = createDiv();
   saunaInfoPanel.parent(parentEl);
   saunaInfoPanel.addClass('sauna-info-panel');
@@ -627,10 +638,10 @@ function setActiveMusicItem(key) {
 function positionSliders() {
   if (!controlsContainer) return;
 
-  // keep container centered at bottom on resize
-  controlsContainer.style('left', '50%');
-  controlsContainer.style('transform', 'translateX(-50%)');
-  controlsContainer.style('bottom', '28px');
+  controlsContainer.style('right', '24px');
+  controlsContainer.style('bottom', '24px');
+  controlsContainer.style('left', '');
+  controlsContainer.style('transform', '');
 }
 
 function windowResized() {
@@ -1330,7 +1341,7 @@ function drawStatsOverlay(temperature, humidityValue, proximity, people) {
     }
 
     // background container
-    fill(0, 0, 0, 100);
+    fill(0, 0, 0, 15);
     rect(x, y, cardWidth, cardHeight, 18);
 
     // value (large)
@@ -1447,7 +1458,7 @@ class HaloOrb {
     const speed = (baseSpeed + proxNorm * 0.0005 + tempNorm * 0.00005) * this.speedJitter;
 
     // advance angle using deltaTime so it feels stable across machines
-  this.angle += speed * (deltaTime || 16);
+    this.angle += speed * (deltaTime || 16);
 
     // radial wobble: more proximity = more wobble
     const wobbleAmp = lerp(3, 45, proxNorm);
