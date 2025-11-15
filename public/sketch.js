@@ -1,0 +1,913 @@
+const gridSize = 55;
+const dotSpacing = 8;
+
+let influenceRadius = 50;
+let maxDistortion = 15;
+
+let dots = [];
+let canvas;
+
+let controlsContainer, slidersGrid;
+
+let tempSlider, humiditySlider, proximitySlider, peopleSlider;
+let tempLabel, humidityLabel, proximityLabel, peopleLabel;
+let autoSimCheckbox;
+
+let autoSimEnabled = false;
+let simStates = {};
+
+// --- stat change animation ---
+const STAT_FLASH_DURATION = 220;
+const STAT_FLASH_EXTRA_SIZE = 10;
+let statAnim = [];
+
+// --- sauna cycle (visual + auto-sim) ---
+let saunaCycleStart = 0;
+let saunaCycleDuration = 2000; // ms, randomized per cycle
+let saunaShapeType = 0;        // 0 = circle, 1 = rect, 2 = rotating rect
+
+// ---------- NORTHERN LIGHTS (AURORA) BACKGROUND ----------
+let auroraTime = 0;
+
+// ---------- LO-FI MUSIC SETUP ----------
+
+// chord palette (F minor-ish, simple lo-fi set)
+const LOFI_CHORDS = [
+  [0, 3, 7],     // i
+  [5, 8, 12],    // iv
+  [7, 10, 14],   // v
+  [10, 14, 17]   // vi-ish / color
+];
+const LOFI_ROOT_MIDI = 53; // F3
+
+let audioStarted = false;
+
+// routing
+let masterGain;
+let reverb;
+
+// pad + bass
+let padOsc1, padOsc2, padOsc3;
+let bassOsc;
+
+// pluck (small melodic accent)
+let pluckOsc;
+let pluckEnv;
+
+// drums
+let kickOsc, kickEnv;
+let snareNoise, snareFilter, snareEnv;
+let hatNoise, hatFilter, hatEnv;
+
+// vinyl
+let vinylNoise, vinylFilter;
+
+// clock (fixed groove, only gently influenced by params)
+let baseBpm = 78;
+let bpm = 78;
+let stepInterval;   // ms between 16th notes
+let lastStepTime = 0;
+let stepIndex = 0;  // 0–15
+let barIndex = 0;
+
+// smoothed sensor values (to avoid jittery mapping)
+let tempSmooth = 60;
+let humSmooth = 50;
+let peopleSmooth = 25;
+let proxSmooth = 100;
+
+// ---------- p5.js setup ----------
+
+function setup() {
+  colorMode(HSB, 360, 100, 100);
+  canvas = createCanvas(windowWidth, windowHeight);
+  background(0);
+
+  initDots();
+  initSliders();
+  initAutoSimulationState();
+  initStatAnim();
+  initSaunaCycle();
+
+  bpm = baseBpm;
+  stepInterval = 60000 / (bpm * 4); // 16th notes (4 * 4 per bar)
+}
+
+// ---------- dots / visuals ----------
+
+function initDots() {
+  dots = [];
+  const totalGridSize = gridSize * dotSpacing;
+  const offsetX = (width - totalGridSize) / 2;
+  const offsetY = (height - totalGridSize) / 2;
+
+  for (let i = 0; i < gridSize; i++) {
+    dots[i] = [];
+    for (let j = 0; j < gridSize; j++) {
+      dots[i][j] = new Dot(i * dotSpacing + offsetX, j * dotSpacing + offsetY);
+    }
+  }
+}
+
+function initSliders() {
+  const parentEl = canvas.parent();
+
+  // --- inject modern CSS once ---
+  if (!window._saunaControlsCSSInjected) {
+    const css = `
+      .controls-container {
+        position: fixed;
+        left: 50%;
+        bottom: 28px;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 24px;
+        align-items: center;
+        padding: 14px 20px;
+        background: rgba(0, 0, 0, 0.72);
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.65);
+        z-index: 20;
+      }
+
+      .sliders-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
+        gap: 14px 24px;
+      }
+
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 190px;
+      }
+
+      .control-label {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.76);
+        opacity: 0.9;
+      }
+
+      .control-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.16);
+        outline: none;
+        margin: 0;
+      }
+
+      .control-slider:focus-visible {
+        outline: none;
+      }
+
+      .control-slider::-webkit-slider-runnable-track {
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .control-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #ffffff;
+        border: none;
+        margin-top: -5px; /* center thumb on track */
+        box-shadow:
+          0 0 0 2px rgba(0, 0, 0, 0.45),
+          0 4px 10px rgba(0, 0, 0, 0.65);
+      }
+
+      .control-slider::-moz-range-track {
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .control-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #ffffff;
+        border: none;
+        box-shadow:
+          0 0 0 2px rgba(0, 0, 0, 0.45),
+          0 4px 10px rgba(0, 0, 0, 0.65);
+      }
+
+      .control-slider::-ms-track {
+        height: 6px;
+        border-radius: 999px;
+        background: transparent;
+        border-color: transparent;
+        color: transparent;
+      }
+
+      .control-slider::-ms-fill-lower,
+      .control-slider::-ms-fill-upper {
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .control-slider::-ms-thumb {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #ffffff;
+        border: none;
+        box-shadow:
+          0 0 0 2px rgba(0, 0, 0, 0.45),
+          0 4px 10px rgba(0, 0, 0, 0.65);
+      }
+
+      .control-checkbox-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.76);
+        white-space: nowrap;
+      }
+
+      .control-checkbox-wrap input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.45);
+        background: rgba(0, 0, 0, 0.4);
+        accent-color: #ffffff;
+        cursor: pointer;
+      }
+    `;
+    const styleEl = createElement('style', css);
+    const head = select('head');
+    if (head) styleEl.parent(head);
+    else styleEl.parent(parentEl);
+    window._saunaControlsCSSInjected = true;
+  }
+
+  // --- container ---
+  controlsContainer = createDiv();
+  controlsContainer.parent(parentEl);
+  controlsContainer.addClass('controls-container');
+
+  // --- grid for sliders (2x2) ---
+  slidersGrid = createDiv();
+  slidersGrid.parent(controlsContainer);
+  slidersGrid.addClass('sliders-grid');
+
+  // helper to create a slider group
+  function makeControlGroup(labelText, min, max, start) {
+    const group = createDiv();
+    group.parent(slidersGrid);
+    group.addClass('control-group');
+
+    const label = createDiv(labelText);
+    label.parent(group);
+    label.addClass('control-label');
+
+    const slider = createSlider(min, max, start);
+    slider.parent(group);
+    slider.addClass('control-slider');
+
+    return { label, slider };
+  }
+
+  // temperature
+  const tempGroup = makeControlGroup('Temperature 🔥 (15–110°)', 15, 110, 60);
+  tempLabel = tempGroup.label;
+  tempSlider = tempGroup.slider;
+
+  // humidity
+  const humGroup = makeControlGroup('Humidity 💧 (0–100%)', 0, 100, 50);
+  humidityLabel = humGroup.label;
+  humiditySlider = humGroup.slider;
+
+  // proximity
+  const proxGroup = makeControlGroup('Proximity 📡 (0–200)', 0, 200, 100);
+  proximityLabel = proxGroup.label;
+  proximitySlider = proxGroup.slider;
+
+  // people
+  const peopleGroup = makeControlGroup('People 👥 (0–50)', 0, 50, 25);
+  peopleLabel = peopleGroup.label;
+  peopleSlider = peopleGroup.slider;
+
+  // auto simulation checkbox
+  const autoGroup = createDiv();
+  autoGroup.parent(controlsContainer);
+  autoGroup.addClass('control-checkbox-wrap');
+
+  autoSimCheckbox = createCheckbox('', false);
+  autoSimCheckbox.parent(autoGroup);
+
+  const autoLabel = createSpan('Auto sauna simulation');
+  autoLabel.parent(autoGroup);
+
+  autoSimCheckbox.changed(() => {
+    autoSimEnabled = autoSimCheckbox.checked();
+    if (autoSimEnabled) resetAutoSimulationState();
+  });
+
+  positionSliders();
+}
+
+function positionSliders() {
+  if (!controlsContainer) return;
+
+  // keep container centered at bottom on resize
+  controlsContainer.style('left', '50%');
+  controlsContainer.style('transform', 'translateX(-50%)');
+  controlsContainer.style('bottom', '28px');
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  initDots();
+  positionSliders();
+}
+
+// ---------- sauna cycle helpers ----------
+
+function initSaunaCycle() {
+  saunaCycleDuration = random(1500, 3000); // N between 1500ms and 3000ms
+  saunaCycleStart = millis();
+  saunaShapeType = floor(random(3));       // randomly choose shape each cycle
+}
+
+// ---------- auto-simulation logic ----------
+
+function initAutoSimulationState() {
+  simStates = {
+    temp:      makeSimState(tempSlider,      15, 110),
+    humidity:  makeSimState(humiditySlider,   0, 100),
+    proximity: makeSimState(proximitySlider,  0, 200),
+    people:    makeSimState(peopleSlider,     0,  50)
+  };
+  initSaunaCycle(); // first cycle defines both visual + random data timing
+}
+
+function resetAutoSimulationState() {
+  initAutoSimulationState();
+}
+
+function makeSimState(slider, min, max) {
+  return {
+    slider,
+    min,
+    max
+  };
+}
+
+// every saunaCycleDuration ms, update all "random sauna data" once
+function updateAutoSimulation() {
+  const now = millis();
+  const elapsed = now - saunaCycleStart;
+
+  if (elapsed >= saunaCycleDuration) {
+    // one "sauna tick": move all sliders a bit
+    for (const key in simStates) {
+      const state = simStates[key];
+      if (!state) continue;
+
+      const current = state.slider.value();
+      const maxDelta = (state.max - state.min) * 0.15;
+      let next = current + random(-maxDelta, maxDelta);
+      next = constrain(Math.round(next), state.min, state.max);
+      state.slider.value(next);
+    }
+
+    // start a new cycle with a new random N in [1500, 3000] ms
+    initSaunaCycle();
+  }
+}
+
+// ---------- stat animation state ----------
+
+function initStatAnim() {
+  statAnim = [
+    { lastValue: tempSlider.value(),      lastChangeTime: -9999 },
+    { lastValue: humiditySlider.value(),  lastChangeTime: -9999 },
+    { lastValue: proximitySlider.value(), lastChangeTime: -9999 },
+    { lastValue: peopleSlider.value(),    lastChangeTime: -9999 }
+  ];
+}
+
+// ---------- SOUND INITIALIZATION (LO-FI, COHERENT GROOVE) ----------
+
+function initSound() {
+  masterGain = new p5.Gain();
+  masterGain.amp(0.7);
+  masterGain.connect(); // to master output
+
+  reverb = new p5.Reverb();
+  reverb.process(masterGain, 4, 3);
+  reverb.amp(0.6);
+
+  // pad: 3 detuned waves
+  padOsc1 = new p5.Oscillator('sine');
+  padOsc2 = new p5.Oscillator('triangle');
+  padOsc3 = new p5.Oscillator('sine');
+
+  padOsc1.disconnect();
+  padOsc2.disconnect();
+  padOsc3.disconnect();
+
+  padOsc1.connect(masterGain);
+  padOsc2.connect(masterGain);
+  padOsc3.connect(masterGain);
+
+  padOsc1.amp(0);
+  padOsc2.amp(0);
+  padOsc3.amp(0);
+
+  padOsc1.start();
+  padOsc2.start();
+  padOsc3.start();
+
+  // bass
+  bassOsc = new p5.Oscillator('sine');
+  bassOsc.disconnect();
+  bassOsc.connect(masterGain);
+  bassOsc.amp(0);
+  bassOsc.start();
+
+  // pluck (small melodic accent)
+  pluckOsc = new p5.Oscillator('triangle');
+  pluckOsc.disconnect();
+  pluckOsc.connect(masterGain);
+  pluckOsc.amp(0);
+  pluckOsc.start();
+
+  pluckEnv = new p5.Envelope();
+  pluckEnv.setADSR(0.01, 0.25, 0.0, 0.2);
+  pluckEnv.setRange(0.18, 0);
+
+  // kick
+  kickOsc = new p5.Oscillator('sine');
+  kickOsc.disconnect();
+  kickOsc.connect(masterGain);
+  kickOsc.freq(60);
+  kickOsc.amp(0);
+  kickOsc.start();
+
+  kickEnv = new p5.Envelope();
+  kickEnv.setADSR(0.001, 0.15, 0.0, 0.1);
+  kickEnv.setRange(0.7, 0);
+
+  // snare
+  snareNoise = new p5.Noise('white');
+  snareFilter = new p5.BandPass();
+  snareNoise.disconnect();
+  snareNoise.connect(snareFilter);
+  snareFilter.connect(masterGain);
+  snareFilter.freq(1800);
+  snareFilter.res(4);
+  snareNoise.amp(0);
+  snareNoise.start();
+
+  snareEnv = new p5.Envelope();
+  snareEnv.setADSR(0.001, 0.12, 0.0, 0.05);
+  snareEnv.setRange(0.35, 0);
+
+  // hats
+  hatNoise = new p5.Noise('white');
+  hatFilter = new p5.HighPass();
+  hatNoise.disconnect();
+  hatNoise.connect(hatFilter);
+  hatFilter.connect(masterGain);
+  hatFilter.freq(6000);
+  hatFilter.res(1);
+  hatNoise.amp(0);
+  hatNoise.start();
+
+  hatEnv = new p5.Envelope();
+  hatEnv.setADSR(0.001, 0.05, 0.0, 0.03);
+  hatEnv.setRange(0.18, 0);
+
+  // vinyl hiss
+  vinylNoise = new p5.Noise('white');
+  vinylFilter = new p5.BandPass();
+  vinylNoise.disconnect();
+  vinylNoise.connect(vinylFilter);
+  vinylFilter.connect(masterGain);
+  vinylFilter.freq(3200);
+  vinylFilter.res(8);
+  vinylNoise.amp(0);
+  vinylNoise.start();
+}
+
+// p5 requires a user gesture to start audio context
+function mousePressed() {
+  if (!audioStarted) {
+    userStartAudio();
+    initSound();
+    audioStarted = true;
+  }
+}
+
+// ---------- SOUND UPDATES: STABLE LO-FI COMBINATION ----------
+
+function updateSound(temperature, humidityValue, proximity, people) {
+  if (!audioStarted) return;
+
+  const now = millis();
+
+  // smooth sensor values to avoid jittery music
+  tempSmooth   = lerp(tempSmooth,   temperature,     0.02);
+  humSmooth    = lerp(humSmooth,    humidityValue,   0.08);
+  peopleSmooth = lerp(peopleSmooth, people,          0.1);
+  proxSmooth   = lerp(proxSmooth,   proximity,       0.1);
+
+  // 1) Groove: BPM is mostly constant, lightly moved by temperature
+  const tempInfluence = map(tempSmooth, 15, 110, -5, 5);
+  const lfo = sin(now * 0.0003) * 1.5; // tiny natural drift
+  bpm = baseBpm + tempInfluence + lfo;
+  bpm = constrain(bpm, 70, 86);
+  stepInterval = 60000 / (bpm * 4); // 16ths
+
+  // 2) Chord progression driven by slow-changing temperature
+  let tNorm = constrain(map(tempSmooth, 15, 110, 0, 1), 0, 1);
+  let targetChordIdx = floor(map(tNorm, 0, 1, 0, LOFI_CHORDS.length - 0.001));
+  targetChordIdx = constrain(targetChordIdx, 0, LOFI_CHORDS.length - 1);
+
+  // 3) Texture: humidity -> reverb & vinyl noise (but not groove)
+  const vinylLevel = map(humSmooth, 0, 100, 0.02, 0.09);
+  vinylNoise.amp(vinylLevel, 2.0);
+
+  const reverbWet = map(humSmooth, 0, 100, 0.45, 0.9);
+  reverb.amp(reverbWet);
+
+  // 4) People -> pad & bass loudness (fuller crowd = fuller music)
+  const padBaseAmp = 0.03;
+  const padExtraAmp = map(peopleSmooth, 0, 50, 0.0, 0.14);
+  const padAmp = padBaseAmp + padExtraAmp;
+
+  padOsc1.amp(padAmp * 0.85, 1.5);
+  padOsc2.amp(padAmp * 0.6,  1.5);
+  padOsc3.amp(padAmp * 0.5,  1.5);
+
+  const bassAmp = map(peopleSmooth, 0, 50, 0.04, 0.13);
+  bassOsc.amp(bassAmp, 1.0);
+
+  // 5) Proximity -> pluck activity and hat brightness
+  const hatCutoff = map(proxSmooth, 0, 200, 5000, 9000);
+  hatFilter.freq(hatCutoff);
+
+  // --- Step clock: 16 steps per bar, stable lo-fi drum pattern ---
+
+  if (now - lastStepTime >= stepInterval) {
+    lastStepTime = now;
+    stepIndex = (stepIndex + 1) % 16;
+    if (stepIndex === 0) {
+      barIndex = (barIndex + 1) % 64; // long cycle
+
+      // at bar boundary, choose chord based on slow temperature
+      const chordIdx = targetChordIdx;
+      const chord = LOFI_CHORDS[chordIdx];
+
+      const rootNote = LOFI_ROOT_MIDI;
+      const note1 = midiToFreq(rootNote + chord[0]);
+      const note2 = midiToFreq(rootNote + chord[1]);
+      const note3 = midiToFreq(rootNote + chord[2]);
+      const bassNote = midiToFreq(rootNote - 12 + chord[0]);
+
+      // small detune wobble over time
+      const wobble1 = 1 + sin(now * 0.0005) * 0.01;
+      const wobble2 = 1 + sin(now * 0.0004 + 1.3) * 0.015;
+      const wobble3 = 1 + sin(now * 0.00045 + 2.1) * 0.008;
+
+      padOsc1.freq(note1 * wobble1);
+      padOsc2.freq(note2 * wobble2);
+      padOsc3.freq(note3 * wobble3);
+      bassOsc.freq(bassNote);
+    }
+
+    // Drum pattern:
+    // kick: strong on 1 (0) and 3 (8), optional ghost depending on people
+    if (stepIndex === 0 || stepIndex === 8) {
+      triggerKick();
+    }
+    if (peopleSmooth > 28 && stepIndex === 12 && random() < 0.6) {
+      triggerKick(1); // softer ghost
+    }
+
+    // snare: backbeat on 2 (4) and 4 (12)
+    if (stepIndex === 4 || stepIndex === 12) {
+      triggerSnare();
+    }
+
+    // hats: soft 16th notes, more active with more people
+    const hatProbBase = 0.3;
+    const hatProbExtra = map(peopleSmooth, 0, 50, 0.0, 0.4);
+    const hatProb = hatProbBase + hatProbExtra;
+    if (random() < hatProb) {
+      triggerHat();
+    }
+
+    // pluck: small melodic flicks based on proximity (movement in space)
+    const pluckProb = map(proxSmooth, 0, 200, 0.05, 0.5);
+    if ((stepIndex === 3 || stepIndex === 7 || stepIndex === 11 || stepIndex === 15) &&
+        random() < pluckProb) {
+      triggerPluck();
+    }
+  }
+}
+
+// ---------- individual sound triggers ----------
+
+function triggerKick(strength = 0) {
+  if (!audioStarted) return;
+
+  const baseFreq = 55;
+  const tempFactor = map(tempSmooth, 15, 110, 0, 10);
+  const kickFreq = baseFreq + tempFactor;
+  kickOsc.freq(kickFreq);
+
+  if (strength === 1) {
+    kickEnv.setRange(0.4, 0);
+  } else {
+    kickEnv.setRange(0.7, 0);
+  }
+  kickEnv.play(kickOsc, 0);
+}
+
+function triggerSnare() {
+  if (!audioStarted) return;
+  snareEnv.play(snareNoise, 0);
+}
+
+function triggerHat() {
+  if (!audioStarted) return;
+  hatEnv.play(hatNoise, 0);
+}
+
+function triggerPluck() {
+  if (!audioStarted) return;
+
+  // small melodic moves around the current chord root
+  const baseMidi = LOFI_ROOT_MIDI + 12; // one octave up
+  const offsets = [0, 2, 3, 5, 7]; // minor-ish scale
+  const offset = random(offsets);
+  const noteFreq = midiToFreq(baseMidi + offset);
+
+  pluckOsc.freq(noteFreq);
+  pluckEnv.play(pluckOsc, 0);
+}
+
+// ---------- sauna full-screen background ----------
+
+// ---------- northern lights aurora background (full-screen ribbons) ----------
+
+function drawAurora(temperature, humidityValue) {
+  push();
+  colorMode(HSB, 360, 100, 100, 255);
+  noFill();
+
+  const tempNorm = constrain(map(temperature, 15, 110, 0, 1), 0, 1);
+  const humNorm  = constrain(map(humidityValue, 0, 100, 0, 1), 0, 1);
+
+  // keep a cool/greenish base, but softer
+  const baseHue = lerp(130, 160, tempNorm);
+
+  // much softer alpha for subtle ribbons
+  const alphaBase = lerp(25, 70, humNorm);
+
+  const layers = 7;
+  for (let layer = 0; layer < layers; layer++) {
+    const layerFactor = layer / (layers - 1);       // 0..1
+    const yBase = lerp(height * 0.15, height * 0.85, layerFactor);
+    const amp   = lerp(height * 0.25, height * 0.08, layerFactor);
+
+    // pastel: low saturation, high brightness
+    const hue    = (baseHue + layer * 10) % 360;
+    const sat    = lerp(18, 28, layerFactor);       // reduced saturation
+    const bright = lerp(92, 98, layerFactor);       // very bright / milky
+    let alpha    = alphaBase - layer * 5;
+    alpha = max(alpha, 0);
+
+    stroke(hue, sat, bright, alpha);
+    strokeWeight(0.7 - layerFactor * 0.3);          // thinner, more delicate
+
+    beginShape();
+    for (let x = -40; x <= width + 40; x += 8) {
+      const nx = x * 0.0018;
+      const ny = auroraTime * 0.00035 + layer * 4.0;
+
+      const n1 = noise(nx, ny);
+      const n2 = noise(nx * 0.7 + 100.0, ny * 1.3 + 50.0);
+      const wave = (n1 * 0.6 + n2 * 0.4 - 0.5) * 2.0;
+
+      const y = yBase + wave * amp;
+      curveVertex(x, y);
+    }
+    endShape();
+  }
+
+  pop();
+  auroraTime += 16; // slow drift
+}
+
+
+// ---------- main draw ----------
+
+function draw() {
+  if (autoSimEnabled) {
+    updateAutoSimulation();
+  }
+
+  background(0);
+
+  const temperature   = tempSlider.value();
+  const humidityValue = humiditySlider.value();
+  const proximity     = proximitySlider.value();
+  const people        = peopleSlider.value();
+
+  // sauna glow behind, aurora ribbons in front of it but behind the grid
+  drawAurora(temperature, humidityValue);
+
+  const humidityForPhysics = 100 - humidityValue;
+
+  updateSound(temperature, humidityValue, proximity, people);
+
+  const interactionX = map(proximity, 0, 200, 0, width);
+  const interactionY = map(people, 0, 50, 0, height);
+  influenceRadius    = map(humidityForPhysics, 0, 100, 10, 200);
+  maxDistortion      = map(temperature, 15, 110, 1, 50);
+
+  const interactionPosition = createVector(interactionX, interactionY);
+
+  // interaction circle
+  noFill();
+  stroke(150);
+  circle(interactionX, interactionY, influenceRadius * 2);
+
+  // dot grid
+  for (let i = 0; i < gridSize; i++) {
+    for (let j = 0; j < gridSize; j++) {
+      dots[i][j].update(interactionPosition, temperature);
+    }
+  }
+
+  drawStatsOverlay(temperature, humidityValue, proximity, people);
+}
+
+// --- stats row with change animation ---
+
+function drawStatsOverlay(temperature, humidityValue, proximity, people) {
+  const colWidth   = width / 4;
+  const cardWidth  = colWidth - 24;
+  const cardHeight = 70;
+  const cardY      = 20;
+
+  const stats = [
+    { value: `${temperature}°C`, label: 'Temperature 🔥' },
+    { value: `${humidityValue}%`, label: 'Humidity 💧' },
+    { value: `${proximity}`,      label: 'Proximity 📡' },
+    { value: `${people}`,         label: 'People 👥' }
+  ];
+
+  const numericValues = [temperature, humidityValue, proximity, people];
+
+  const flashColors = [
+    { r: 255, g: 140, b: 90 },
+    { r: 90,  g: 190, b: 255 },
+    { r: 120, g: 255, b: 160 },
+    { r: 220, g: 150, b: 255 }
+  ];
+
+  const now = millis();
+
+  push();
+  colorMode(RGB, 255);
+  textFont('sans-serif');
+
+  for (let i = 0; i < 4; i++) {
+    const cx = colWidth * (i + 0.5);
+    const x  = cx - cardWidth / 2;
+    const y  = cardY;
+
+    if (statAnim[i].lastValue !== numericValues[i]) {
+      statAnim[i].lastValue = numericValues[i];
+      statAnim[i].lastChangeTime = now;
+    }
+
+    const elapsed = now - statAnim[i].lastChangeTime;
+
+    const baseSize = 28;
+    let valueSize = baseSize;
+    let valueColor = { r: 255, g: 255, b: 255 };
+
+    if (elapsed >= 0 && elapsed < STAT_FLASH_DURATION) {
+      const t = 1 - elapsed / STAT_FLASH_DURATION;
+      valueSize = baseSize + STAT_FLASH_EXTRA_SIZE * t;
+
+      const fc = flashColors[i];
+      const mix = 1 - t;
+      valueColor = {
+        r: lerp(fc.r, 255, mix),
+        g: lerp(fc.g, 255, mix),
+        b: lerp(fc.b, 255, mix)
+      };
+    }
+
+    noStroke();
+    fill(0, 0, 0, 190);
+    rect(x, y, cardWidth, cardHeight, 16);
+
+    fill(255, 255, 255, 120);
+    rect(x, y, cardWidth, 3, 16, 16, 0, 0);
+
+    fill(valueColor.r, valueColor.g, valueColor.b);
+    textAlign(CENTER, CENTER);
+    textSize(valueSize);
+    text(stats[i].value, cx, y + cardHeight / 2 - 8);
+
+    textSize(12);
+    fill(200);
+    text(stats[i].label, cx, y + cardHeight - 14);
+  }
+
+  pop();
+}
+
+// --- Dot class ---
+
+class Dot {
+  constructor(x, y) {
+    this.position = createVector(x, y);
+    this.originalPosition = this.position.copy();
+    this.velocity = createVector(0, 0);
+    this.hueJitter = random(-8, 8);
+  }
+
+  update(interactionPos, temperature) {
+    let vecToInteraction = this.originalPosition.copy();
+    vecToInteraction.sub(interactionPos);
+
+    const distanceToInteraction = vecToInteraction.mag();
+    const phase = map(distanceToInteraction, 0, influenceRadius, 0, PI);
+
+    vecToInteraction.normalize();
+    vecToInteraction.mult(maxDistortion * sin(phase));
+
+    let strokeWidth;
+    if (distanceToInteraction < influenceRadius) {
+      strokeWidth = 1 + 10 * abs(cos(phase / 2));
+    } else {
+      strokeWidth = map(
+        min(distanceToInteraction, width),
+        0,
+        width,
+        5,
+        0.1
+      );
+    }
+
+    const targetPosition = createVector(
+      this.originalPosition.x + vecToInteraction.x,
+      this.originalPosition.y + vecToInteraction.y
+    );
+
+    let attractionVector = this.position.copy();
+    attractionVector.sub(targetPosition);
+
+    const attractionStrength = map(
+      interactionPos.dist(this.position),
+      0,
+      2 * width,
+      0.1,
+      0.01
+    );
+    attractionVector.mult(-attractionStrength);
+
+    this.velocity.add(attractionVector);
+    this.velocity.mult(0.87);
+    this.position.add(this.velocity);
+
+    let t = map(temperature, 15, 110, 0, 1);
+    let baseHue = lerp(180, 10, t) + this.hueJitter;
+    let sat = 20;
+    let bright = 90;
+
+    stroke(baseHue, sat, bright);
+    strokeWeight(strokeWidth);
+    point(this.position.x, this.position.y);
+  }
+}
