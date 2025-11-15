@@ -50,9 +50,42 @@ body {
 .delay-3 { animation-delay: 0.5s; }
 .delay-4 { animation-delay: 0.7s; }
 
-.cta-appear {
-  opacity: 0;
-  animation: fadeSlide 0.7s ease-out forwards;
-  animation-delay: 1.2s;
+/* Button base + smooth color transition */
+.cta-button {
+  background-color: transparent;              /* transparent when idle */
+  border-color: rgba(200, 200, 200, 0.45);      /* soft green border (≈ Tailwind green-500) */
+  color: var(--foreground);
+  transition:
+    background-color 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    transform 160ms ease;
 }
 
+/* Hover: solid green + subtle glow */
+.cta-button:hover {
+  background-color: #16a34a;                  /* nice green (≈ green-600) */
+  border-color: #22c55e;                      /* brighter green border */
+  color: #ecfdf5;                             /* light text for contrast */
+  font-weight: bold;
+  box-shadow: 0 10px 30px rgba(22, 163, 74, 0.35);
+  animation: cta-pulse 220ms ease-out;
+}
+
+/* Single pulse: grow then shrink back */
+@keyframes cta-pulse {
+  0% {
+    transform: scale(1);
+  }
+  20% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Text: no movement, just inherit color */
+.cta-text {
+  display: inline-block;
+}
