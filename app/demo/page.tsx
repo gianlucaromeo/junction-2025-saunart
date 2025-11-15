@@ -1,8 +1,6 @@
-// app/demo/P5Canvas.tsx (or wherever it lives)
 "use client";
 
 import { useEffect } from "react";
-import Script from "next/script";
 
 declare global {
   interface Window {
@@ -14,48 +12,71 @@ declare global {
 }
 
 export default function P5Canvas() {
-  // Ensure we clean up the p5 instance when leaving /demo
   useEffect(() => {
+    let cancelled = false;
+    let p5Script: HTMLScriptElement | null = null;
+    let soundScript: HTMLScriptElement | null = null;
+    let sketchScript: HTMLScriptElement | null = null;
+
+    const head = document.head || document.getElementsByTagName("head")[0];
+
+    function loadScript(src: string): Promise<HTMLScriptElement> {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        script.async = false; // preserve order
+        script.onload = () => resolve(script);
+        script.onerror = (e) => reject(e);
+        head.appendChild(script);
+      });
+    }
+
+    (async () => {
+      try {
+        // 1) p5 core
+        p5Script = await loadScript(
+          "https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"
+        );
+        if (cancelled) return;
+
+        // 2) p5.sound (needs p5 global to exist)
+        soundScript = await loadScript(
+          "https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/addons/p5.sound.min.js"
+        );
+        if (cancelled) return;
+
+        // 3) your sketch, which assumes p5 + p5.sound are ready
+        sketchScript = await loadScript("/sketch.js");
+        if (cancelled) return;
+
+        // Start the sketch once everything is guaranteed loaded
+        if (window.startSaunaSketch) {
+          window.startSaunaSketch();
+        } else if (window.p5 && !window._saunaP5) {
+          window._saunaP5 = new window.p5();
+        }
+      } catch (err) {
+        console.error("Error loading p5 stack", err);
+      }
+    })();
+
     return () => {
+      cancelled = true;
+
       if (window.stopSaunaSketch) {
         window.stopSaunaSketch();
       } else if (window._saunaP5) {
         window._saunaP5.remove();
         window._saunaP5 = undefined;
       }
+
+      if (p5Script && p5Script.parentNode) p5Script.parentNode.removeChild(p5Script);
+      if (soundScript && soundScript.parentNode)
+        soundScript.parentNode.removeChild(soundScript);
+      if (sketchScript && sketchScript.parentNode)
+        sketchScript.parentNode.removeChild(sketchScript);
     };
   }, []);
 
-  return (
-    <>
-      {/* Container the sketch can attach to (your sketch can still use full-screen canvas) */}
-      <div id="p5-container" />
-
-      {/* Load p5 AFTER the page is interactive, not beforeInteractive */}
-      <Script
-        src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"
-        strategy="afterInteractive"
-      />
-
-      <Script
-        src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/addons/p5.sound.min.js"
-        strategy="afterInteractive"
-      />
-
-      {/* Load your sketch and explicitly start it when it's ready */}
-      <Script
-        src="/sketch.js"
-        strategy="afterInteractive"
-        onLoad={() => {
-          // This runs when /sketch.js has been loaded (even on client-side nav to /demo)
-          if (window.startSaunaSketch) {
-            window.startSaunaSketch();
-          } else if (window.p5 && !window._saunaP5) {
-            // Fallback: if startSaunaSketch somehow isn't defined
-            window._saunaP5 = new window.p5();
-          }
-        }}
-      />
-    </>
-  );
+  return <div id="p5-container" className="w-full h-full" />;
 }
