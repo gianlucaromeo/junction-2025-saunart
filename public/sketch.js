@@ -12,6 +12,11 @@ let controlsContainer, slidersGrid;
 let tempSlider, humiditySlider, proximitySlider, peopleSlider;
 let autoSimCheckbox;
 
+// ---------- OUTER HALO VISUAL (AROUND GRID) ----------
+let haloOrbs = [];
+const HALO_ORB_COUNT = 80;
+
+
 // auto-sim progress bar DOM
 let autoSimProgressContainer, autoSimProgressBar;
 
@@ -109,7 +114,9 @@ function setup() {
   background(0);
 
   initDots();
+  initHaloOrbs();
   initSliders();
+
 
   // initialize smoothed background state from sliders
   saunaBGTemp = tempSlider.value();
@@ -629,8 +636,10 @@ function positionSliders() {
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   initDots();
+  initHaloOrbs();
   positionSliders();
 }
+
 
 // ---------- sauna cycle helpers ----------
 
@@ -709,6 +718,22 @@ function updateAutoSimProgressUI() {
 
   autoSimProgressBar.style('width', (t * 100).toFixed(1) + '%');
 }
+
+function initHaloOrbs() {
+  haloOrbs = [];
+
+  const totalGridSize = gridSize * dotSpacing;
+  const innerRadius = totalGridSize * 0.55;               // just outside grid
+  const outerRadius = min(width, height) * 0.7;           // near screen edge
+
+  for (let i = 0; i < HALO_ORB_COUNT; i++) {
+    const angle = random(TWO_PI);
+    const radius = random(innerRadius, outerRadius);
+
+    haloOrbs.push(new HaloOrb(angle, radius));
+  }
+}
+
 
 // ---------- stat animation state ----------
 
@@ -1149,6 +1174,48 @@ function drawGridPlate() {
   pop();
 }
 
+function drawHaloOrbs(temperature, humidityValue, proximity, people) {
+  if (!haloOrbs || haloOrbs.length === 0) return;
+
+  const tempNorm   = constrain(map(temperature,   15, 110, 0, 1), 0, 1);
+  const humNorm    = constrain(map(humidityValue,  0, 100, 0, 1), 0, 1);
+  const proxNorm   = constrain(map(proximity,      0, 200, 0, 1), 0, 1);
+  const peopleNorm = constrain(map(people,         0,  50, 0, 1), 0, 1);
+
+  push();
+  colorMode(HSB, 360, 100, 100, 255);
+  noStroke();
+
+  const centerX = width * 0.5;
+  const centerY = height * 0.5;
+
+  // subtle link to the existing sauna palette
+  const baseHue = lerp(190, 30, tempNorm);           // cooler → warmer
+  const baseSat = lerp(25, 80, tempNorm);
+  const baseBright = lerp(40, 95, 1 - humNorm * 0.7); // wetter = dimmer, smokier
+
+  // more people = more "active" halo alpha
+  const alphaBase = lerp(30, 110, peopleNorm);
+
+  for (let orb of haloOrbs) {
+    orb.updateAndDraw({
+      centerX,
+      centerY,
+      baseHue,
+      baseSat,
+      baseBright,
+      alphaBase,
+      tempNorm,
+      humNorm,
+      proxNorm,
+      peopleNorm
+    });
+  }
+
+  pop();
+}
+
+
 
 // ---------- main draw ----------
 
@@ -1170,6 +1237,9 @@ function draw() {
   // sauna state background + aurora ribbons behind the grid
   drawSaunaBackground(saunaBGTemp, saunaBGHum);
   drawAurora(saunaBGTemp, saunaBGHum);
+
+  // halo visualizer around the central grid
+  drawHaloOrbs(temperature, humidityValue, proximity, people);
 
   const humidityForPhysics = 100 - humidityValue;
 
@@ -1340,6 +1410,79 @@ class Dot {
     point(this.position.x, this.position.y);
   }
 }
+
+class HaloOrb {
+  constructor(angle, baseRadius) {
+    this.angle = angle;
+    this.baseRadius = baseRadius;
+    this.speedJitter = random(0.65, 1.4);
+    this.sizeBase = random(4, 10);
+    this.noiseOffset = random(1000);
+  }
+
+  updateAndDraw(params) {
+    const {
+      centerX,
+      centerY,
+      baseHue,
+      baseSat,
+      baseBright,
+      alphaBase,
+      tempNorm,
+      humNorm,
+      proxNorm,
+      peopleNorm
+    } = params;
+
+    // global time for synced pulsing
+    const now = millis();
+
+    // rotation speed: mostly from proximity (movement) + a bit from temperature
+    const baseSpeed = 0.00006;
+    const speed = (baseSpeed + proxNorm * 0.0005 + tempNorm * 0.00005) * this.speedJitter;
+
+    // advance angle using deltaTime so it feels stable across machines
+  this.angle += speed * (deltaTime || 16);
+
+    // radial wobble: more proximity = more wobble
+    const wobbleAmp = lerp(3, 45, proxNorm);
+    const wobble =
+      sin(now * 0.0012 + this.noiseOffset) * wobbleAmp;
+
+    const radius = this.baseRadius + wobble;
+    const x = centerX + cos(this.angle) * radius;
+    const y = centerY + sin(this.angle) * radius;
+
+    // size: base → larger with more people, pulsing with a slow beat
+    const beatPhase = now * 0.004 + this.noiseOffset * 0.3;
+    const pulse = 0.5 + 0.5 * sin(beatPhase);
+    const size =
+      this.sizeBase +
+      lerp(0, 10, peopleNorm) * pulse;
+
+    // color: slight per-orb hue shift + humidity-dependent softness
+    const hue = baseHue + this.noiseOffset * 0.03;
+    const sat = baseSat * lerp(0.7, 1.1, tempNorm);
+    const bright = baseBright * (0.9 + 0.25 * pulse);
+
+    // wetter air = more diffuse, less opaque halo
+    const alpha = alphaBase * lerp(0.4, 1.0, 1 - humNorm * 0.6);
+
+    fill(hue, sat, bright, alpha);
+
+    // slight elongation in direction of motion for a "trail" feel
+    const trailScale = 1.0 + proxNorm * 0.8;
+    const trailW = size * trailScale;
+    const trailH = size * lerp(1.1, 1.8, proxNorm);
+
+    push();
+    translate(x, y);
+    rotate(this.angle);
+    ellipse(0, 0, trailW, trailH);
+    pop();
+  }
+}
+
 
 // At the VERY END of sketch.js
 
