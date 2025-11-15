@@ -588,7 +588,7 @@ function initMusicSelector() {
   saunaInfoPanel.addClass('sauna-info-panel');
 
   const saunaInfoText = createDiv(
-    'Music and art are generated in real-time by the current state of the sauna. If youn can\'t hear the sound, please refresh 🤗.'
+    'Music and art are generated in real-time by the current state of the sauna. If youn can\'t hear the sound after clicking on the screen, please refresh 🤗.'
   );
   saunaInfoText.parent(saunaInfoPanel);
   saunaInfoText.addClass('sauna-info-text');
