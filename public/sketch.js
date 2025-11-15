@@ -97,6 +97,10 @@ let humSmooth = 50;
 let peopleSmooth = 25;
 let proxSmooth = 100;
 
+// ---------- sauna background visual smoothing ----------
+let saunaBGTemp = 60;
+let saunaBGHum = 50;
+
 // ---------- p5.js setup ----------
 
 function setup() {
@@ -106,6 +110,11 @@ function setup() {
 
   initDots();
   initSliders();
+
+  // initialize smoothed background state from sliders
+  saunaBGTemp = tempSlider.value();
+  saunaBGHum = humiditySlider.value();
+
   initMusicSelector();
   initAutoSimulationState();
   initStatAnim();
@@ -979,6 +988,96 @@ function triggerPluck() {
   pluckEnv.play(pluckOsc, 0);
 }
 
+// ---------- SAUNA STATE BACKGROUND (COLOR FROM TEMP + HUMIDITY) ----------
+
+function drawSaunaBackground(temperature, humidityValue) {
+  push();
+  colorMode(HSB, 360, 100, 100, 100);
+  noStroke();
+
+  const tempNorm = constrain(map(temperature, 15, 110, 0, 1), 0, 1);
+  const humNorm  = constrain(map(humidityValue, 0, 100, 0, 1), 0, 1);
+
+  // hue: cool blue at low temp → hot orange/red at high temp
+  const baseHue = lerp(210, 25, tempNorm);
+
+  // saturation: warmer and wetter = more saturated
+  let baseSat = lerp(22, 70, tempNorm);
+  baseSat = lerp(baseSat, 95, humNorm);
+
+  // brightness: dry → brighter, wet → more subdued, smoky
+  let baseBright = lerp(18, 60, tempNorm);
+  baseBright = lerp(baseBright, 95, 1 - humNorm * 0.8);
+
+  // create a vertical gradient (top → bottom)
+  const topCol = color(
+    baseHue + 8,
+    baseSat * 0.7,
+    baseBright * 0.6
+  );
+  const midCol = color(
+    baseHue,
+    baseSat,
+    baseBright
+  );
+  const bottomCol = color(
+    baseHue - 10,
+    baseSat * 1.1,
+    baseBright * 0.85
+  );
+
+  // vertical blend: top → mid → bottom
+  for (let y = 0; y < height; y++) {
+    const t = y / max(height - 1, 1);
+    let col;
+    if (t < 0.45) {
+      const tt = t / 0.45;
+      col = lerpColor(topCol, midCol, tt);
+    } else {
+      const tt = (t - 0.45) / 0.55;
+      col = lerpColor(midCol, bottomCol, tt);
+    }
+    stroke(col);
+    line(0, y, width, y);
+  }
+
+  // radial "stove" glow near the bottom center
+  const glowX = width * 0.5;
+  const glowY = height * 0.92;
+  const maxR  = max(width, height) * 0.8;
+
+  noFill();
+  for (let r = maxR; r > 0; r -= 40) {
+    const t = 1 - r / maxR;
+    const glowHue = baseHue - 12;
+    const glowSat = baseSat * (0.9 + 0.3 * t);
+    const glowBright = baseBright * (1.1 + 0.5 * t);
+
+    const alpha = map(t, 0, 1, 0, 35 + 40 * humNorm);
+    stroke(glowHue, glowSat, glowBright, alpha);
+    ellipse(glowX, glowY, r * 1.3, r);
+  }
+
+  // soft vignette so edges stay dark and the grid pops
+  const vignetteSteps = 12;
+  for (let i = 0; i < vignetteSteps; i++) {
+    const v = i / (vignetteSteps - 1);
+    const alpha = map(v, 0, 1, 0, 18 + humNorm * 14);
+    stroke(0, 0, 0, alpha);
+    noFill();
+    const margin = v * max(width, height) * 0.35;
+    rect(
+      -margin,
+      -margin,
+      width + margin * 2,
+      height + margin * 2,
+      32
+    );
+  }
+
+  pop();
+}
+
 // ---------- northern lights aurora background (full-screen ribbons) ----------
 
 function drawAurora(temperature, humidityValue) {
@@ -1030,6 +1129,26 @@ function drawAurora(temperature, humidityValue) {
   auroraTime += 16; // slow drift
 }
 
+function drawGridPlate() {
+  const totalGridSize = gridSize * dotSpacing;
+  const offsetX = (width - totalGridSize) / 2;
+  const offsetY = (height - totalGridSize) / 2;
+
+  push();
+  // still in HSB mode with alpha 0–255
+  noStroke();
+  // slightly transparent dark plate behind the grid
+  fill(0, 0, 0, 150); // black with alpha
+  rect(
+    offsetX - 24,
+    offsetY - 24,
+    totalGridSize + 48,
+    totalGridSize + 48,
+    32
+  );
+  pop();
+}
+
 
 // ---------- main draw ----------
 
@@ -1039,15 +1158,18 @@ function draw() {
     updateAutoSimProgressUI();
   }
 
-  background(0);
-
   const temperature   = tempSlider.value();
   const humidityValue = humiditySlider.value();
   const proximity     = proximitySlider.value();
   const people        = peopleSlider.value();
 
-  // sauna glow behind, aurora ribbons in front of it but behind the grid
-  drawAurora(temperature, humidityValue);
+  // smooth the visual background response to avoid harsh jumps
+  saunaBGTemp = lerp(saunaBGTemp, temperature, 0.05);
+  saunaBGHum  = lerp(saunaBGHum,  humidityValue, 0.05);
+
+  // sauna state background + aurora ribbons behind the grid
+  drawSaunaBackground(saunaBGTemp, saunaBGHum);
+  drawAurora(saunaBGTemp, saunaBGHum);
 
   const humidityForPhysics = 100 - humidityValue;
 
