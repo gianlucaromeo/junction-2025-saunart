@@ -161,9 +161,9 @@ function initSliders() {
         display: flex;
         gap: 24px;
         align-items: center;
-        padding: 14px 20px;
+        padding: 22px 32px;
         background: rgba(0, 0, 0, 0.72);
-        border-radius: 999px;
+        border-radius: 48px;
         border: 1px solid rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(18px);
         -webkit-backdrop-filter: blur(18px);
@@ -1330,8 +1330,8 @@ function drawStatsOverlay(temperature, humidityValue, proximity, people) {
     fill(0, 0, 0, 190);
     rect(x, y, cardWidth, cardHeight, 16);
 
-    fill(255, 255, 255, 120);
-    rect(x, y, cardWidth, 3, 16, 16, 0, 0);
+    // fill(255, 255, 255, 120);
+    // rect(x, y, cardWidth, 3, 16, 16, 0, 0);
 
     fill(valueColor.r, valueColor.g, valueColor.b);
     textAlign(CENTER, CENTER);
