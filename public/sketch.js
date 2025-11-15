@@ -966,99 +966,94 @@ function mousePressed() {
   }
 }
 
-// ---------- SOUND UPDATES: STRONGER PARAM MAPPING ----------
-
-// ---------- SOUND UPDATES: STRONGER HUMIDITY MAPPING ----------
+// ---------- SOUND UPDATES: PEOPLE = CROWD, PROXIMITY = MOTION ----------
 
 function updateSound(temperature, humidityValue, proximity, people) {
   if (!audioStarted || currentMusic !== 'lofi') return;
 
   const now = millis();
 
-  // slightly faster smoothing – responsive but not twitchy
+  // smoothing
   tempSmooth   = lerp(tempSmooth,   temperature,     0.08);
   humSmooth    = lerp(humSmooth,    humidityValue,   0.10);
-  peopleSmooth = lerp(peopleSmooth, people,          0.12);
-  proxSmooth   = lerp(proxSmooth,   proximity,       0.12);
+  peopleSmooth = lerp(peopleSmooth, people,          0.20); // faster: more obvious
+  proxSmooth   = lerp(proxSmooth,   proximity,       0.20);
 
   const temp01   = constrain(map(tempSmooth,   15, 110, 0, 1), 0, 1);
   const hum01    = constrain(map(humSmooth,     0, 100, 0, 1), 0, 1);
   const people01 = constrain(map(peopleSmooth,  0,  50, 0, 1), 0, 1);
   const prox01   = constrain(map(proxSmooth,    0, 200, 0, 1), 0, 1);
 
-  // energy = “how intense the beat is”
+  // energy: overall intensity
   const energy = constrain(
-    temp01   * 0.5 +
-    people01 * 0.35 +
+    temp01   * 0.4 +
+    people01 * 0.45 +   // crowd matters a lot
     prox01   * 0.15,
     0, 1
   );
 
-  // space = humidity → how wet / muffled vs dry / clear
+  // space: humidity → reverb + vinyl
   const space = hum01;
-  const dryWet = pow(space, 0.8); // accent mid–high humidity
+  const dryWet = pow(space, 0.8);
 
-  // 1) TEMPO – driven by energy (temp + people + proximity)
+  // ---------- TEMPO (mostly energy) ----------
+
   const lfo = sin(now * 0.0005) * 2;
   bpm = 65 + energy * 30 + lfo;        // 65 → 95 BPM
   bpm = constrain(bpm, 60, 98);
   stepInterval = 60000 / (bpm * 4);    // 16th notes
 
-  // 2) HARMONY – temperature → chord region
+  // ---------- HARMONY (temperature) ----------
+
   let tNorm = temp01;
   let targetChordIdx = floor(map(tNorm, 0, 1, 0, LOFI_CHORDS.length - 0.001));
   targetChordIdx = constrain(targetChordIdx, 0, LOFI_CHORDS.length - 1);
 
-  // 3) TEXTURE – humidity VERY clearly changes reverb + vinyl + tone
+  // ---------- TEXTURE: humidity ----------
 
-  // more humidity = more vinyl, but still safe
-  const vinylLevel = map(dryWet, 0, 1, 0.0, 0.18);
+  const vinylLevel = map(dryWet, 0, 1, 0.0, 0.20);
   vinylNoise.amp(vinylLevel, 0.8);
 
-  // more humidity = more reverb, but high energy gets slightly drier
-  const reverbBase   = map(dryWet, 0, 1, 0.02, 0.98);
-  const reverbDampen = map(energy, 0, 1, 1.0, 0.7); // fast stuff a bit drier
+  const reverbBase   = map(dryWet, 0, 1, 0.05, 0.98);
+  const reverbDampen = map(energy, 0, 1, 1.0, 0.7);
   reverb.amp(reverbBase * reverbDampen);
 
-  // brightness factor for the whole top-end
-  // 0 humidity  → brightness ~1.0 (open hats, bright snare)
-  // 100%       → brightness ~0.35 (darker hats/snare)
-  const brightness = lerp(1.0, 0.35, dryWet);
-
-  // hats: both energy AND humidity
-  const hatBaseLow  = 3500;
-  const hatBaseHigh = 11000;
-  const hatEnergyPos = constrain(energy * brightness, 0, 1);
-  const hatCutoff = lerp(hatBaseLow, hatBaseHigh, hatEnergyPos);
+  // hats brightness: proximity = motion
+  // far (prox ~ 0) → darker hats, close → very bright hats
+  const hatCutoff = lerp(2500, 11000, prox01);
   hatFilter.freq(hatCutoff);
 
-  // snare: more humidity = darker, shorter
-  const snareFreq = lerp(2400, 1400, dryWet);
+  // snare brighter when dry, darker when very humid
+  const snareFreq = lerp(2600, 1400, dryWet);
   snareFilter.freq(snareFreq);
-  const snareMax = lerp(0.30, 0.42, 1 - dryWet); // very humid → a bit softer
-  snareEnv.setRange(snareMax, 0);
 
-  // vinyl tone: humid = slightly lower band, more “whoosh”
+  // vinyl tone: more humid → lower, whooshier
   const vinylCenter = lerp(4200, 2600, dryWet);
   vinylFilter.freq(vinylCenter);
 
-  // 4) DENSITY – energy → how full the mix is
+  // ---------- DENSITY: people = "crowd" ----------
 
-  const padAmp = map(energy, 0, 1, 0.0, 0.24);
+  // pads and bass change a lot with people, always within safe lo-fi range
+  const padBase = map(people01, 0, 1, 0.00, 0.26);
+  const padEnergyBoost = lerp(0.6, 1.2, energy);
+  const padAmp = padBase * padEnergyBoost;
 
-  // at very high humidity, make pads slightly more present than bass
-  const padSpaceBoost = lerp(1.0, 1.25, dryWet);
-  const bassSpaceCut  = lerp(1.0, 0.8,  dryWet);
+  padOsc1.amp(padAmp * 0.85, 0.4);
+  padOsc2.amp(padAmp * 0.60, 0.4);
+  padOsc3.amp(padAmp * 0.50, 0.4);
 
-  padOsc1.amp(padAmp * 0.85 * padSpaceBoost, 0.8);
-  padOsc2.amp(padAmp * 0.60 * padSpaceBoost, 0.8);
-  padOsc3.amp(padAmp * 0.50 * padSpaceBoost, 0.8);
+  const bassBase = map(people01, 0, 1, 0.02, 0.20);
+  const bassSpaceCut = lerp(1.0, 0.8, dryWet); // very humid → slightly softer bass
+  const bassAmp = bassBase * bassSpaceCut;
+  bassOsc.amp(bassAmp, 0.4);
 
-  const bassAmpBase = map(energy, 0, 1, 0.03, 0.18);
-  const bassAmp     = bassAmpBase * bassSpaceCut;
-  bassOsc.amp(bassAmp, 0.6);
+  // slight overall loudness change with crowd
+  if (masterGain) {
+    const masterLevel = lerp(0.4, 0.9, people01);
+    masterGain.amp(masterLevel, 0.5);
+  }
 
-  // 5) STEP CLOCK
+  // ---------- STEP CLOCK ----------
 
   if (now - lastStepTime >= stepInterval) {
     lastStepTime = now;
@@ -1086,41 +1081,59 @@ function updateSound(temperature, humidityValue, proximity, people) {
       bassOsc.freq(bassNote);
     }
 
-    // ---------- DRUM + MELODY PATTERN (ENERGY-DEPENDENT) ----------
+    // ---------- DRUM PATTERNS: people01 controls pattern shape ----------
 
-    // KICK patterns by energy
-    if (energy < 0.33) {
+    if (people01 < 0.25) {
+      // very few people: super minimal
+      if (stepIndex === 0) triggerKick();
+      if (stepIndex === 8 && random() < 0.4) triggerKick(1);
+      if (stepIndex === 4 || stepIndex === 12) triggerSnare();
+    } else if (people01 < 0.65) {
+      // medium crowd: classic lo-fi groove
       if (stepIndex === 0 || stepIndex === 8) triggerKick();
-    } else if (energy < 0.66) {
-      if (stepIndex === 0 || stepIndex === 8) triggerKick();
-      if (stepIndex === 12 && random() < 0.5) triggerKick(1);
+      if (stepIndex === 12 && random() < 0.6) triggerKick(1);
+      if (stepIndex === 4 || stepIndex === 12) triggerSnare();
     } else {
+      // busy crowd: 4-on-the-floor feel with ghosts
       if (stepIndex === 0 || stepIndex === 4 || stepIndex === 8 || stepIndex === 12) {
         triggerKick();
       }
-      if ((stepIndex === 2 || stepIndex === 10 || stepIndex === 14) && random() < 0.6) {
+      if ((stepIndex === 2 || stepIndex === 10 || stepIndex === 14) && random() < 0.7) {
         triggerKick(1);
       }
+      if (stepIndex === 4 || stepIndex === 12) triggerSnare();
+      if ((stepIndex === 6 || stepIndex === 14) && random() < 0.4) triggerSnare();
     }
 
-    // SNARE: always 2 & 4, ghosts on high energy
-    if (stepIndex === 4 || stepIndex === 12) {
-      triggerSnare();
-    }
-    if (energy > 0.75 && (stepIndex === 6 || stepIndex === 14) && random() < 0.3) {
-      triggerSnare();
-    }
-
-    // HATS: density from energy, tone already handled by humidity above
-    const hatProb = map(energy, 0, 1, 0.1, 0.9);
+    // hats: density mainly from people, not just energy
+    const hatProb = map(people01, 0, 1, 0.05, 0.95);
     if (random() < hatProb) {
       triggerHat();
     }
 
-    // PLUCKS: driven by proximity / movement
-    const pluckProb = map(prox01, 0, 1, 0.02, 0.65);
-    if ((stepIndex === 3 || stepIndex === 7 || stepIndex === 11 || stepIndex === 15) &&
-        random() < pluckProb) {
+    // ---------- PLUCKS: proximity = motion, very explicit ----------
+
+    // low motion: occasional simple plucks
+    // high motion: busy syncopated plucks
+    const lowMotion = prox01 < 0.35;
+    const midMotion = prox01 >= 0.35 && prox01 < 0.7;
+
+    let pluckProb;
+    if (lowMotion) {
+      pluckProb = 0.05;
+    } else if (midMotion) {
+      pluckProb = 0.25;
+    } else {
+      pluckProb = 0.6;
+    }
+
+    const syncStepsLow = [0, 8];
+    const syncStepsHigh = [3, 7, 11, 15];
+
+    if (lowMotion && syncStepsLow.includes(stepIndex) && random() < pluckProb) {
+      triggerPluck();
+    }
+    if (!lowMotion && syncStepsHigh.includes(stepIndex) && random() < pluckProb) {
       triggerPluck();
     }
   }
@@ -1128,7 +1141,6 @@ function updateSound(temperature, humidityValue, proximity, people) {
 
 
 
-// ---------- individual sound triggers ----------
 
 function triggerKick(strength = 0) {
   if (!audioStarted) return;
@@ -1138,13 +1150,66 @@ function triggerKick(strength = 0) {
   const kickFreq = baseFreq + tempFactor;
   kickOsc.freq(kickFreq);
 
+  // crowd makes the kick clearly stronger
+  const people01 = constrain(map(peopleSmooth, 0, 50, 0, 1), 0, 1);
+  const crowdBoost = lerp(0.5, 1.3, people01);
+
   if (strength === 1) {
-    kickEnv.setRange(0.4, 0);
+    kickEnv.setRange(0.4 * crowdBoost, 0);
   } else {
-    kickEnv.setRange(0.7, 0);
+    kickEnv.setRange(0.7 * crowdBoost, 0);
   }
   kickEnv.play(kickOsc, 0);
 }
+
+function triggerHat() {
+  if (!audioStarted) return;
+
+  // hats also get louder with crowd and a bit with motion
+  const people01 = constrain(map(peopleSmooth, 0, 50, 0, 1), 0, 1);
+  const prox01   = constrain(map(proxSmooth,   0, 200, 0, 1), 0, 1);
+
+  const base = 0.10;
+  const extra = 0.18 * people01 + 0.07 * prox01; // clearly different at extremes
+  const hatLevel = base + extra;
+
+  hatEnv.setRange(hatLevel, 0);
+  hatEnv.play(hatNoise, 0);
+}
+
+function triggerPluck() {
+  if (!audioStarted) return;
+
+  const prox01 = constrain(map(proxSmooth, 0, 200, 0, 1), 0, 1);
+
+  // base octave
+  const baseMidi = LOFI_ROOT_MIDI + 12;
+
+  // low motion → narrow range, almost one note
+  // high motion → wide range, more melodic jumps
+  const offsetsLow  = [0, 2, 3];
+  const offsetsHigh = [0, 2, 3, 5, 7, 9, 10];
+
+  let offsets, spread;
+  if (prox01 < 0.35) {
+    offsets = offsetsLow;
+    spread  = 0;          // almost same note
+  } else if (prox01 < 0.7) {
+    offsets = offsetsHigh;
+    spread  = 4;          // within a few notes
+  } else {
+    offsets = offsetsHigh;
+    spread  = 12;         // span an extra octave when very close
+  }
+
+  const baseOffset = random(offsets);
+  const extra      = floor(random(-spread / 2, spread / 2 + 1));
+  const noteFreq = midiToFreq(baseMidi + baseOffset + extra);
+
+  pluckOsc.freq(noteFreq);
+  pluckEnv.play(pluckOsc, 0);
+}
+
 
 function triggerSnare() {
   if (!audioStarted) return;
