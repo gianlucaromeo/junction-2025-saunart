@@ -32,6 +32,25 @@ let saunaShapeType = 0;        // 0 = circle, 1 = rect, 2 = rotating rect
 // ---------- NORTHERN LIGHTS (AURORA) BACKGROUND ----------
 let auroraTime = 0;
 
+// ---------- MUSIC SELECTION UI ----------
+
+const MUSIC_TYPES = [
+  "lofi",
+  "nature_ambience",
+  "rain_sounds",
+  "binaural_beats",
+  "tibetan_bowls",
+  "arctic_wind",
+  "forest_stream",
+  "minimal_ambient",
+  "deep_drone",
+  "ocean_waves"
+];
+
+let musicListContainer, musicListInner, musicMessageEl;
+let musicItemEls = {};
+let currentMusic = "lofi"; // default
+
 // ---------- LO-FI MUSIC SETUP ----------
 
 // chord palette (F minor-ish, simple lo-fi set)
@@ -88,6 +107,7 @@ function setup() {
 
   initDots();
   initSliders();
+  initMusicSelector();
   initAutoSimulationState();
   initStatAnim();
   initSaunaCycle();
@@ -281,6 +301,99 @@ function initSliders() {
         transform-origin: left center;
         transition: width 80ms linear;
       }
+
+      /* --- MUSIC SELECTOR PANEL --- */
+
+      .music-selector-container {
+        position: fixed;
+        left: 24px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 230px;
+        max-height: 340px;
+        padding: 14px 14px 10px;
+        background: rgba(0, 0, 0, 0.78);
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.75);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        z-index: 22;
+      }
+
+      .music-selector-header {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.92);
+      }
+
+      .music-selector-subtitle {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.55);
+      }
+
+      .music-selector-list {
+        margin-top: 4px;
+        padding: 4px 0;
+        overflow-y: auto;
+        max-height: 220px;
+      }
+
+      .music-item {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.78);
+        padding: 7px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        border-radius: 999px;
+      }
+
+      .music-item:not(:last-child) {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .music-item:hover {
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .music-item.is-active {
+        background: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+        color: rgba(255, 255, 255, 1);
+      }
+
+      .music-badge {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        color: rgba(255, 255, 255, 0.8);
+      }
+
+      .music-selector-message {
+        margin-top: 6px;
+        min-height: 14px;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 180, 180, 0.9);
+      }
     `;
     const styleEl = createElement('style', css);
     const head = select('head');
@@ -368,6 +481,94 @@ function initSliders() {
   });
 
   positionSliders();
+}
+
+// ---------- MUSIC SELECTOR INIT + HANDLERS ----------
+
+function initMusicSelector() {
+  const parentEl = canvas.parent();
+
+  musicListContainer = createDiv();
+  musicListContainer.parent(parentEl);
+  musicListContainer.addClass('music-selector-container');
+
+  const header = createDiv('Soundscape');
+  header.parent(musicListContainer);
+  header.addClass('music-selector-header');
+
+  const subtitle = createDiv('Select ambience');
+  subtitle.parent(musicListContainer);
+  subtitle.addClass('music-selector-subtitle');
+
+  musicListInner = createDiv();
+  musicListInner.parent(musicListContainer);
+  musicListInner.addClass('music-selector-list');
+
+  musicItemEls = {};
+
+  MUSIC_TYPES.forEach((key) => {
+    const item = createDiv(formatMusicLabel(key));
+    item.parent(musicListInner);
+    item.addClass('music-item');
+
+    // badge for lo-fi to indicate active/available
+    if (key === 'lofi') {
+      const badge = createSpan('LIVE');
+      badge.parent(item);
+      badge.addClass('music-badge');
+    }
+
+    item.mousePressed(() => handleMusicChange(key));
+    musicItemEls[key] = item;
+  });
+
+  musicMessageEl = createDiv('');
+  musicMessageEl.parent(musicListContainer);
+  musicMessageEl.addClass('music-selector-message');
+
+  setActiveMusicItem('lofi');
+}
+
+function formatMusicLabel(key) {
+  const mapLabels = {
+    lofi: 'Lo-fi',
+    nature_ambience: 'Nature ambience',
+    rain_sounds: 'Rain sounds',
+    binaural_beats: 'Binaural beats',
+    tibetan_bowls: 'Tibetan bowls',
+    arctic_wind: 'Arctic wind',
+    forest_stream: 'Forest stream',
+    minimal_ambient: 'Minimal ambient',
+    deep_drone: 'Deep drone',
+    ocean_waves: 'Ocean waves'
+  };
+  return mapLabels[key] || key.replace(/_/g, ' ');
+}
+
+function handleMusicChange(key) {
+  // Only Lo-fi is actually available; everything else is "coming soon"
+  if (key === 'lofi') {
+    currentMusic = 'lofi';
+    setActiveMusicItem('lofi');
+    if (musicMessageEl) musicMessageEl.html('');
+  } else {
+    if (musicMessageEl) musicMessageEl.html('Coming soon');
+    // keep playback on lo-fi, visually revert selection
+    currentMusic = 'lofi';
+    setActiveMusicItem('lofi');
+  }
+}
+
+function setActiveMusicItem(key) {
+  for (const type in musicItemEls) {
+    const el = musicItemEls[type];
+    if (!el) continue;
+    if (type === key) {
+      el.addClass('is-active');
+    } else {
+      el.removeClass('is-active');
+    }
+  }
 }
 
 function positionSliders() {
@@ -591,6 +792,11 @@ function mousePressed() {
 
 function updateSound(temperature, humidityValue, proximity, people) {
   if (!audioStarted) return;
+
+  // even if UI pretends to switch tracks, engine stays on Lo-fi only
+  if (currentMusic !== 'lofi') {
+    currentMusic = 'lofi';
+  }
 
   const now = millis();
 
