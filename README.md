@@ -1,22 +1,32 @@
 # SAUN.ART
 
-> Proposed solution for Junction 2025 - Sauna Intelligence (main challenge) - Team bltn
+SAUN.ART turns sauna sensor data into a living audiovisual experience.
 
-Today, companies use sauna-generated data for monitoring-purposes only.
+Today, sauna data (_temperature, humidity, proximity, occupancy_) is mostly used for dashboards and maintenance. **SAUN.ART** uses the same streams to generate real-time visuals and sound, so the sauna feels like a responsive, living space rather than a static room.
 
-### What if temperature, humidity, proximity, and occupancy can turn into real-time visuals and sound?
+Inside the sauna, a heat-resistant screen shows generative art that reacts to the current state of the room: hotter saunas shift the color palette, humidity softens or sharpens the visuals, crowd size changes the intensity and density of motion. At the same time, a sound engine creates an adaptive soundscape that becomes calmer, denser, or more rhythmic depending on how the sauna is used.
 
-Data can become atmosphere. Sauna can feel like a living space.
+Harvia’s existing sensors become the interface between bodies and the environment: hardware becomes experience.
 
-We are introducing **SAUN.ART**: The first in-sauna screen that shows your sauna state as a unique form of art.
+How it works
 
-The screen sits in the heat. The art breathes with the people in the room.
+1. We tap into Harvia’s temperature, humidity, proximity, and occupancy sensors in real time.
 
-A feedback loop between body, heat, and art.
+2. Each sensor value is normalized and mapped to visual and audio parameters (color, brightness, motion, tempo, rhythm density, texture).
 
-Harvia’s sensors turn hardware into experience.
+3. Our graphics algorithms, made with **p5.js**, render abstract “sauna states” artwork on an in-sauna display. The composition continuously evolves based on live data instead of pre-rendered animations.
 
-A sauna is no longer silent. It speaks through motion and sound.
+4. Our lightweight audio engine generates an adaptive soundscape (lo-fi / ambient). Sensor data controls tempo, patterns, and texture so that the sound reflects the atmosphere in the room.
+
+5. As people enter, move, and heat builds up, both the visuals and sound shift. Users intuitively understand the sauna state through art, creating a continuous feedback loop between body, heat, and environment.
+
+<br/>
+
+SAUNA.ART & Harvia’s sensors turn sauna hardware into experience.
+
+<br/>
+
+A sauna is no longer silent. It speaks through motion and sound.
 
 ### Demo
 
