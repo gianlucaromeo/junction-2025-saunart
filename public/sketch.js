@@ -293,6 +293,14 @@ function initSliders() {
         margin-top: 4px;
       }
 
+      .control-checkbox-row {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+      }
+
+
       .control-checkbox-wrap input[type="checkbox"] {
         width: 14px;
         height: 14px;
@@ -475,7 +483,7 @@ function initSliders() {
   controlsHeader.parent(controlsContainer);
   controlsHeader.addClass('music-selector-header');
 
-  const controlsSubtitle = createDiv('Adjust conditions');
+  const controlsSubtitle = createDiv('Simulate conditions');
   controlsSubtitle.parent(controlsContainer);
   controlsSubtitle.addClass('music-selector-subtitle');
 
@@ -522,20 +530,30 @@ function initSliders() {
   peopleSlider = peopleGroup.slider;
 
   // auto simulation checkbox + progress
+  // auto simulation checkbox + progress
   const autoGroup = createDiv();
   autoGroup.parent(controlsContainer);
   autoGroup.addClass('control-checkbox-wrap');
 
+  // row: checkbox + label
+  const autoRow = createDiv();
+  autoRow.parent(autoGroup);
+  autoRow.addClass('control-checkbox-row');
+
   autoSimCheckbox = createCheckbox('', false);
-  autoSimCheckbox.parent(autoGroup);
+  autoSimCheckbox.parent(autoRow);
 
   const autoLabel = createSpan('Auto sauna simulation');
-  autoLabel.parent(autoGroup);
+  autoLabel.parent(autoRow);
 
-  // progress bar under the checkbox
+  // progress bar under the row
   autoSimProgressContainer = createDiv();
   autoSimProgressContainer.parent(autoGroup);
   autoSimProgressContainer.addClass('auto-progress-wrap');
+
+  autoSimProgressBar = createDiv();
+  autoSimProgressBar.parent(autoSimProgressContainer);
+  autoSimProgressBar.addClass('auto-progress-bar');
 
   autoSimProgressBar = createDiv();
   autoSimProgressBar.parent(autoSimProgressContainer);
