@@ -1,10 +1,10 @@
 # SAUN.ART
 
-> Proposed solution for Junction 2025 - Sauna Intelligence (main challenge)
+> Proposed solution for Junction 2025 - Sauna Intelligence (main challenge) - Team bltn
 
 Today, companies use sauna-generated data for monitoring-purposes only.
 
-What if temperature, humidity, proximity, and occupancy can turn into real-time visuals and sound?
+### What if temperature, humidity, proximity, and occupancy can turn into real-time visuals and sound?
 
 Data can become atmosphere. Sauna can feel like a living space.
 
@@ -17,3 +17,8 @@ A feedback loop between body, heat, and art.
 Harvia’s sensors turn hardware into experience.
 
 A sauna is no longer silent. It speaks through motion and sound.
+
+### Demo
+
+https://github.com/user-attachments/assets/41298b40-8449-468a-a6dc-0a106045824a
+
